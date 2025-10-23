@@ -151,6 +151,7 @@ public class DistributionSearchGenerationJPA {
 
 				// AVAILABLE FORMATS
 				List<AvailableFormat> availableFormats = AvailableFormatsGeneration.generate(distribution);//formats.get(distribution.getInstanceId());//AvailableFormatsGeneration.generate(distribution);
+                List<DataServiceProvider> dataServiceProviderList = new ArrayList<>();
 
 				if (distribution.getAccessService() != null) {
 					distribution.getAccessService().forEach(linkedEntity1 -> {
@@ -164,6 +165,10 @@ public class DistributionSearchGenerationJPA {
 												.add(String.join(",", organization.getLegalName()));
 									organizationsEntityIds.add(organization);
 								}
+                                List<DataServiceProvider> serviceProviders = DataServiceProviderGeneration.getProviders(List.of(organization));
+                                if (!serviceProviders.isEmpty()){
+                                    dataServiceProviderList.add(serviceProviders.getFirst());
+                                }
 							}
 
 							// Service Types
@@ -190,7 +195,8 @@ public class DistributionSearchGenerationJPA {
 						.description(distribution.getDescription() != null
 								? String.join(";", distribution.getDescription())
 								: null)
-						.availableFormats(availableFormats)
+                        .dataServiceProvider(dataServiceProviderList.isEmpty()?null:dataServiceProviderList.get(0))
+                        .availableFormats(availableFormats)
 						.sha256id(distribution.getUid() != null
 								? DigestUtils.sha256Hex(distribution.getUid())
 								: "")
