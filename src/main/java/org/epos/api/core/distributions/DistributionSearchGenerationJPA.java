@@ -182,6 +182,7 @@ public class DistributionSearchGenerationJPA {
 					});
 				}
 
+
 				DiscoveryItemBuilder discoveryItemBuilder = new DiscoveryItemBuilder(distribution.getInstanceId(),
 						EnvironmentVariables.API_HOST + API_PATH_DETAILS + distribution.getInstanceId(),
 						EnvironmentVariables.API_HOST + API_PATH_DETAILS + distribution.getInstanceId()

@@ -406,4 +406,5 @@ public class DiscoveryItem implements Serializable {
                 ", changeDate=" + changeDate +
                 '}';
     }
+
 }
