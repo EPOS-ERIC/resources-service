@@ -31,8 +31,7 @@ public class DiscoveryItem implements Serializable {
     private String editorFullName;
     private LocalDateTime changeDate;
 
-    public DiscoveryItem() {
-    }
+    public DiscoveryItem() {}
 
     public DiscoveryItem(DiscoveryItemBuilder builder) {
         this.href = builder.href;

@@ -170,7 +170,6 @@ public class DistributionSearchGenerationJPA {
                                     dataServiceProviderList.add(serviceProviders.getFirst());
                                 }
 							}
-
 							// Service Types
 							if (webService.getCategory() != null) {
 								webService.getCategory()
