@@ -3,14 +3,18 @@ package org.epos.api.core.software;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.epos.api.beans.AvailableContactPoints;
+import org.epos.api.beans.AvailableFormat;
 import org.epos.api.beans.DiscoveryItem;
 import org.epos.api.beans.software.SoftwareApplicationResponse;
 import org.epos.api.core.EnvironmentVariables;
+import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.enums.ProviderType;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
@@ -19,6 +23,7 @@ import org.epos.eposdatamodel.Identifier;
 import org.epos.eposdatamodel.SoftwareApplication;
 
 import commonapis.LinkedEntityAPI;
+import org.epos.eposdatamodel.SoftwareSourceCode;
 
 public class SoftwareApplicationGenerationJPA {
 
@@ -46,6 +51,7 @@ public class SoftwareApplicationGenerationJPA {
 		response.setStorageRequirements(softwareApplication.getStorageRequirements());
 		response.setCitation(softwareApplication.getCitation());
 		response.setOperatingSystem(softwareApplication.getOperatingSystem());
+        response.setAvailableFormats(createFormatsForApplication(softwareApplication));
 		// Split keywords by comma and return as List<String>, trimming spaces
 		String keywordsStr = softwareApplication.getKeywords();
 		if (keywordsStr != null && !keywordsStr.trim().isEmpty()) {
@@ -124,4 +130,39 @@ public class SoftwareApplicationGenerationJPA {
 
 		return response;
 	}
+
+    private static List<AvailableFormat> createFormatsForApplication(SoftwareApplication software) {
+        if (software.getDownloadURL() != null) {
+            return createFormatsFromUrl(software.getDownloadURL());
+        } else if (software.getMainEntityOfPage() != null) {
+            return createFormatsFromUrl(software.getMainEntityOfPage());
+        }
+        return null;
+    }
+
+    private static List<AvailableFormat> createFormatsFromUrl(String url) {
+        String format = extractFormatFromUrl(url);
+        if (format != null) {
+            format = format.toUpperCase();
+            return List.of(new AvailableFormat.AvailableFormatBuilder()
+                    .originalFormat(format)
+                    .format(format)
+                    .href(url)
+                    .label(format)
+                    .type(AvailableFormatType.ORIGINAL)
+                    .build());
+        }
+        return null;
+    }
+    private static final Pattern FORMAT_PATTERN = Pattern.compile("\\.([a-zA-Z0-9]+)(?:/|$|\\?)");
+
+    private static String extractFormatFromUrl(String url) {
+        Matcher matcher = FORMAT_PATTERN.matcher(url);
+        String format = null;
+        // get the last match
+        while (matcher.find()) {
+            format = matcher.group(1);
+        }
+        return format;
+    }
 }

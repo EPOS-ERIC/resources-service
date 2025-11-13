@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.epos.api.beans.AvailableContactPoints;
+import org.epos.api.beans.AvailableFormat;
 import org.epos.api.facets.Node;
 import org.epos.eposdatamodel.SoftwareApplication;
 
@@ -32,6 +33,7 @@ public class SoftwareApplicationResponse {
 	private List<String> doi;
 	private List<String> identifiers;
 	private List<AvailableContactPoints> availableContactPoints;
+    private List<AvailableFormat> availableFormats;
 	private Node categories;
 
 	public SoftwareApplicationResponse(SoftwareApplication softwareApplication) {
@@ -254,4 +256,12 @@ public class SoftwareApplicationResponse {
 	public void setCategories(Node categories) {
 		this.categories = categories;
 	}
+
+    public List<AvailableFormat> getAvailableFormats() {
+        return availableFormats;
+    }
+
+    public void setAvailableFormats(List<AvailableFormat> availableFormats) {
+        this.availableFormats = availableFormats;
+    }
 }

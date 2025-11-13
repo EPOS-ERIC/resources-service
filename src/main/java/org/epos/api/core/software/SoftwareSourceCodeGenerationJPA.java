@@ -3,19 +3,24 @@ package org.epos.api.core.software;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.epos.api.beans.AvailableContactPoints;
+import org.epos.api.beans.AvailableFormat;
 import org.epos.api.beans.DiscoveryItem;
 import org.epos.api.beans.software.SoftwareSourceCodeResponse;
 import org.epos.api.core.EnvironmentVariables;
+import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.enums.ProviderType;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
 import org.epos.eposdatamodel.Category;
 import org.epos.eposdatamodel.Identifier;
+import org.epos.eposdatamodel.SoftwareApplication;
 import org.epos.eposdatamodel.SoftwareSourceCode;
 
 import commonapis.LinkedEntityAPI;
@@ -41,6 +46,7 @@ public class SoftwareSourceCodeGenerationJPA {
 		response.setSoftwareStatus(softwareSourceCode.getSoftwareStatus());
 		response.setSpatial(softwareSourceCode.getSpatial());
 		response.setTemporal(softwareSourceCode.getTemporal());
+        response.setAvailableFormats(createFormatsForSourceCode(softwareSourceCode));
 		String keywordsStr = softwareSourceCode.getKeywords();
 		if (keywordsStr != null && !keywordsStr.trim().isEmpty()) {
 			List<String> kw = List.of(keywordsStr.split(",")).stream()
@@ -120,4 +126,40 @@ public class SoftwareSourceCodeGenerationJPA {
 
 		return response;
 	}
+
+
+    private static List<AvailableFormat> createFormatsForSourceCode(SoftwareSourceCode software) {
+        if (software.getDownloadURL() != null) {
+            return createFormatsFromUrl(software.getDownloadURL());
+        } else if (software.getCodeRepository() != null) {
+            return createFormatsFromUrl(software.getCodeRepository());
+        }
+        return null;
+    }
+
+    private static List<AvailableFormat> createFormatsFromUrl(String url) {
+        String format = extractFormatFromUrl(url);
+        if (format != null) {
+            format = format.toUpperCase();
+            return List.of(new AvailableFormat.AvailableFormatBuilder()
+                    .originalFormat(format)
+                    .format(format)
+                    .href(url)
+                    .label(format)
+                    .type(AvailableFormatType.ORIGINAL)
+                    .build());
+        }
+        return null;
+    }
+    private static final Pattern FORMAT_PATTERN = Pattern.compile("\\.([a-zA-Z0-9]+)(?:/|$|\\?)");
+
+    private static String extractFormatFromUrl(String url) {
+        Matcher matcher = FORMAT_PATTERN.matcher(url);
+        String format = null;
+        // get the last match
+        while (matcher.find()) {
+            format = matcher.group(1);
+        }
+        return format;
+    }
 }
