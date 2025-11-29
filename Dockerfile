@@ -1,4 +1,4 @@
-FROM amazoncorretto:21-alpine-jdk
+FROM amazoncorretto:21-alpine3.22
 
 ADD target/*.jar app.jar
 ADD src/main/resources/log4j2.xml log4j2.xml
