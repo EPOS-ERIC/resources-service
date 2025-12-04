@@ -11,12 +11,12 @@ RUN apk upgrade --no-cache \
     && adduser -u 1001 -S appuser -G appgroup
 
 WORKDIR /app
-COPY --chown=1001:1001 target/*.jar app.jar
 
 # Create logs directory with proper ownership
 RUN mkdir -p /app/logs && chown 1001:1001 /app/logs
 
-# Explicit numeric UID for better detection
+COPY --chown=1001:1001 target/*.jar app.jar
+
 USER 1001:1001
 
 EXPOSE 8080
