@@ -1,20 +1,4 @@
-FROM amazoncorretto:21-alpine-jdk AS builder
-
-RUN apk add --no-cache binutils
-
-WORKDIR /app
-COPY target/*.jar app.jar
-
-RUN $JAVA_HOME/bin/jlink \
-    --verbose \
-    --add-modules java.base,java.management,java.naming,java.net.http,java.security.jgss,java.security.sasl,java.sql,jdk.httpserver,jdk.unsupported,java.logging \
-    --strip-debug \
-    --no-man-pages \
-    --no-header-files \
-    --compress=zip-6 \
-    --output /custom-jre
-
-FROM alpine:3.20
+FROM amazoncorretto:21-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/your-org/your-repo" \
       org.opencontainers.image.description="Your app description" \
@@ -26,13 +10,8 @@ RUN apk upgrade --no-cache \
     && addgroup -g 1001 -S appgroup \
     && adduser -u 1001 -S appuser -G appgroup
 
-COPY --from=builder /custom-jre /opt/java
-
 WORKDIR /app
-COPY --from=builder --chown=1001:1001 /app/app.jar app.jar
-
-ENV JAVA_HOME=/opt/java \
-    PATH="/opt/java/bin:$PATH"
+COPY --chown=1001:1001 target/*.jar app.jar
 
 # Explicit numeric UID for better detection
 USER 1001:1001
