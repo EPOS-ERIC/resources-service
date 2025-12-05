@@ -21,13 +21,6 @@ public class LivenessHealthIndicator implements HealthIndicator {
             return Health.down().withDetail("No Router Connection", 1).build();
         }
         try {
-            if(DatabaseConnections.getInstance().getPlugins().isEmpty()){
-                return Health.down().withDetail("No Plugins Loaded", 1).build();
-            }
-        }catch(Exception e){
-            return Health.down().withDetail("No Plugins Connection", 1).build();
-        }
-        try {
             EposDataModelDAO.getInstance().getAllFromDB(Person.class);
         }catch(Exception e){
             return Health.down().withDetail("No Database Connection", 1).build();
