@@ -34,7 +34,16 @@ public class DatabaseConnections {
 
 	// distributionId -> list of relations with plugins
 	private Map<String, List<Plugin.Relations>> plugins;
-	private RpcRouter router;
+
+    public RpcRouter getRouter() {
+        return router;
+    }
+
+    public void setRouter(RpcRouter router) {
+        this.router = router;
+    }
+
+    private RpcRouter router;
 
 	private int maxDbConnections = 18;
 	private static DatabaseConnections connections;
