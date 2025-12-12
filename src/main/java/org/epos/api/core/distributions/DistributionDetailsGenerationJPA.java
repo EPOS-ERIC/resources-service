@@ -380,7 +380,7 @@ public class DistributionDetailsGenerationJPA {
         if (dp.getSpatialExtent() != null) {
             dp.getSpatialExtent().forEach(sLe -> {
                 Location s = (Location) preFetched.locations.get(sLe.getInstanceId());
-                if (s != null) {
+                if (s != null && s.getLocation() != null && !s.getLocation().isEmpty()) {
                     distribution.getSpatial().addPaths(
                             SpatialInformation.doSpatial(s.getLocation()),
                             SpatialInformation.checkPoint(s.getLocation())

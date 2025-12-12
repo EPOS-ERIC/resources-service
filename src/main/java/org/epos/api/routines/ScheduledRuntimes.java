@@ -107,7 +107,7 @@ public class ScheduledRuntimes {
 		LOGGER.info("[Scheduled Task - Facets] Facets successfully updated");
 	}
 
-	@Scheduled(fixedRate = 600000, initialDelay = 0)
+	@Scheduled(fixedRateString = "${cache.ttl:600000}", initialDelay = 0)
 	@Async
 	public void connectionsUpdater() {
 		LOGGER.info("[Scheduled Task - Resources] Updating resources information");

@@ -1,5 +1,7 @@
 FROM amazoncorretto:21-alpine
 
+ENV CACHE_TTL=600000
+
 LABEL org.opencontainers.image.source="https://github.com/your-org/your-repo" \
       org.opencontainers.image.description="Your app description" \
       org.opencontainers.image.licenses="MIT"
