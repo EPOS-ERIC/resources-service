@@ -131,7 +131,8 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ env.VERSION }}
+            type=raw,value=${{ env.VERSION }},enable=${{ github.ref_type == 'tag' }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
             type=sha,prefix=
 
       - name: Build and Push with Attestations
