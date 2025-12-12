@@ -8,7 +8,7 @@
 # Jobs:
 #   1. security-scan: Runs CodeQL analysis for Java code
 #   2. dependency-check: Scans dependencies for known vulnerabilities (fails on CVSS >= 7)
-#   3. build: Builds JAR artifact and Docker image, pushes to GitHub Container Registry
+#   3. build: Builds JAR artifact and Docker image, pushes to GitHub Container Registry (public)
 #   4. mirror: Mirrors the repository to GitLab
 
 name: "release, push to ghcr.io and mirror"
@@ -115,7 +115,10 @@ jobs:
       # Docker/OCI image names must be lowercase
       - name: Set lowercase image name
         id: image-name
-        run: echo "name=$(echo 'ghcr.io/${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        run: |
+          echo "name=$(echo 'ghcr.io/${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "owner=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "repo=$(echo '${{ github.event.repository.name }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Update version in pom.xml
         run: mvn -B versions:set -DnewVersion=${{ env.VERSION }} -DgenerateBackupPoms=false
@@ -168,6 +171,18 @@ jobs:
           provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Make the container package public
+      # Note: For organizations, you may need a PAT with write:packages scope instead of GITHUB_TOKEN
+      - name: Make container public
+        continue-on-error: true  # Don't fail the workflow if visibility change fails
+        run: |
+          curl -X PATCH \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/orgs/${{ steps.image-name.outputs.owner }}/packages/container/${{ steps.image-name.outputs.repo }}/visibility \
+            -d '{"visibility":"public"}'
 
       # Using digest to reference the exact image that was just built
       - name: Scan Docker image with Trivy
