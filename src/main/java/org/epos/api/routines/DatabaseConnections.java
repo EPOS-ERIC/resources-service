@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -98,51 +99,62 @@ public class DatabaseConnections {
 		}, executor);
 	}
 
-	public void syncDatabaseConnections() {
+    public void syncDatabaseConnections() {
 
-		// one thread for each query
-		ExecutorService executor = Executors.newFixedThreadPool(maxDbConnections);
+        // one thread for each query
+        ExecutorService executor = Executors.newFixedThreadPool(maxDbConnections);
 
-		LOGGER.info("reloading cache");
-		EposDataModelDAO.getInstance().reloadCache();
-		LOGGER.info("cache reloaded");
+        CompletableFuture<Map<String, List<Plugin.Relations>>> tempPluginsFuture = createSafeFuture(
+                () -> retrievePlugins(),
+                new HashMap<>(),
+                "retrievePlugins",
+                executor);
 
-		CompletableFuture<Map<String, List<Plugin.Relations>>> tempPluginsFuture = createSafeFuture(
-				() -> retrievePlugins(),
-				new HashMap<>(),
-				"retrievePlugins",
-				executor);
+        // join the futures together
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+                tempPluginsFuture);
 
-		// join the futures together
-		CompletableFuture<Void> allFutures = CompletableFuture.allOf(
-				tempPluginsFuture);
+        // block until all done
+        allFutures.join();
 
-		// block until all done
-		allFutures.join();
+        // retrieve the results of the queries
+        Map<String, List<Plugin.Relations>> tempPlugins = tempPluginsFuture.join();
 
-		// retrieve the results of the queries
-		Map<String, List<Plugin.Relations>> tempPlugins = tempPluginsFuture.join();
+        // convert the list to a map <id, object> for faster retrieval, with null safety
 
-		// convert the list to a map <id, object> for faster retrieval, with null safety
+        lock.writeLock().lock();
 
-		lock.writeLock().lock();
+        // hot-swap the temp variables
+        try {
+            plugins = tempPlugins;
+        } finally {
+            lock.writeLock().unlock();
+        }
 
-		// hot-swap the temp variables
-		try {
+        // free the executor's resources (outside the lock to avoid contention)
+        executor.shutdown();
+        try {
+            // Wait for tasks to complete (with timeout)
+            if (!executor.awaitTermination(180, TimeUnit.SECONDS)) {
+                LOGGER.warn("Executor did not terminate in time, forcing shutdown...");
+                executor.shutdownNow();
 
-			plugins = tempPlugins;
+                // Wait again after forcing
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                    LOGGER.error("Executor did not terminate after shutdownNow");
+                }
+            }
+        } catch (InterruptedException e) {
+            LOGGER.error("Interrupted while waiting for executor termination", e);
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
 
-			// free the executor's resources
-			executor.shutdown();
-		} finally {
-			lock.writeLock().unlock();
-		}
-
-		if (currentErrors >= maxDbConnections) {
-			LOGGER.error("Too many errors while syncing the cache ({}), exiting...", currentErrors);
-			System.exit(1);
-		}
-	}
+        if (currentErrors >= maxDbConnections) {
+            LOGGER.error("Too many errors while syncing the cache ({}), exiting...", currentErrors);
+            System.exit(1);
+        }
+    }
 
 	public static Map<String, User> retrieveUserMap() {
 		return createSafeUserMap(UserGroupManagementAPI.retrieveAllUsers());

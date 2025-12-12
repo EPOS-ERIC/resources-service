@@ -111,8 +111,9 @@ public class ScheduledRuntimes {
 	@Async
 	public void connectionsUpdater() {
 		LOGGER.info("[Scheduled Task - Resources] Updating resources information");
-        DatabaseConnections.getInstance().syncDatabaseConnections();
         EposDataModelDAO.getInstance().printCacheReport();
+        EposDataModelDAO.getInstance().reloadCache();
+        DatabaseConnections.getInstance().syncDatabaseConnections();
         List<DataProduct> dataproducts = ((List<DataProduct>) AbstractAPI
                 .retrieveAPI(EntityNames.DATAPRODUCT.name())
                 .retrieveAll())
