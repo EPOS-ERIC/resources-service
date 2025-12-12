@@ -26,7 +26,6 @@ on:
 env:
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'latest' }}
   REGISTRY: ghcr.io
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
 
 jobs:
   security-scan:
@@ -113,6 +112,11 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      # Docker/OCI image names must be lowercase
+      - name: Set lowercase image name
+        id: image-name
+        run: echo "name=$(echo 'ghcr.io/${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Update version in pom.xml
         run: mvn -B versions:set -DnewVersion=${{ env.VERSION }} -DgenerateBackupPoms=false
 
@@ -146,7 +150,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ steps.image-name.outputs.name }}
           tags: |
             type=raw,value=${{ env.VERSION }},enable=${{ github.ref_type == 'tag' }}
             type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
@@ -169,7 +173,7 @@ jobs:
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.IMAGE_NAME }}@${{ steps.build-push.outputs.digest }}'
+          image-ref: '${{ steps.image-name.outputs.name }}@${{ steps.build-push.outputs.digest }}'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -185,7 +189,7 @@ jobs:
         if: github.ref_type == 'tag'  # Only on releases
         with:
           command: cves,recommendations
-          image: ${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+          image: ${{ steps.image-name.outputs.name }}:${{ env.VERSION }}
           only-severities: critical,high
           exit-code: false  # Set to true to fail on vulnerabilities
 
