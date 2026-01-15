@@ -24,6 +24,7 @@ import org.epos.api.core.MonitoringGeneration;
 import org.epos.api.core.distributions.DistributionDetailsExtendedGenerationJPA;
 import org.epos.api.core.distributions.DistributionDetailsGenerationJPA;
 import org.epos.api.core.distributions.DistributionSearchGenerationJPA;
+import org.epos.api.core.distributions.DistributionSearchGenerationSQL;
 import org.epos.api.core.facilities.EquipmentsDetailsItemGenerationJPA;
 import org.epos.api.core.facilities.FacilityDetailsItemGenerationJPA;
 import org.epos.api.core.facilities.FacilitySearchGenerationJPA;
@@ -55,7 +56,7 @@ abstract class ApiController<T> {
 		
 		switch(service) {
 		case "SEARCH":
-			response = Utils.gson.toJson(DistributionSearchGenerationJPA.generate(requestParams, user));
+			response = Utils.gson.toJson(DistributionSearchGenerationSQL.generate(requestParams, user));
 			break;
 		case "DETAILS":
 			if(Boolean.valueOf(requestParams.get("extended").toString()))
