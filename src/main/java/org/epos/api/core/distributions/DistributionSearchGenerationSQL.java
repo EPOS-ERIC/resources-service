@@ -240,33 +240,21 @@ public class DistributionSearchGenerationSQL {
         // 1. Base Parameters
         List<String> statuses = getStatusList(parameters, user);
         List<String> organizations = getListParam(parameters, "organisations");
+        List<String> keywords = cleanKeywords(getListParam(parameters, "keywords"));
         List<String> scienceDomains = getListParam(parameters, PARAMETER__SCIENCE_DOMAIN);
         List<String> serviceTypes = getListParam(parameters, PARAMETER__SERVICE_TYPE);
-
-        // 2. Keywords Management: Merge 'keywords' param + split 'q' param
-        List<String> keywords = new ArrayList<>(cleanKeywords(getListParam(parameters, "keywords")));
         String q = (String) parameters.get("q");
 
-        // === FIX: Split 'q' into tokens and add to keyword list ===
-        if (q != null && !q.trim().isEmpty()) {
-            // Split by whitespace, comma, semicolon
-            String[] qTokens = q.split("[\\s,;]+");
-            for (String token : qTokens) {
-                if (token != null && !token.trim().isEmpty()) {
-                    String cleanToken = token.trim().toLowerCase();
-                    // Add only if not already present to avoid duplication in SQL params
-                    if (!keywords.contains(cleanToken)) {
-                        keywords.add(cleanToken);
-                    }
-                }
-            }
-        }
+        // Nota: Qui NON aggiungiamo i token di 'q' alla lista 'keywords' usata per il filtro dataproduct_info (CTE 2),
+        // perché quella CTE filtra solo sul campo 'keywords' del DataProduct.
+        // La ricerca 'q' è più ampia (cerca anche in titolo e descrizione) e va fatta alla fine.
 
         Timestamp startDate = parseDateParam(parameters.get("schema:startDate"));
         Timestamp endDate = parseDateParam(parameters.get("schema:endDate"));
 
         ctx.sql.append("WITH ");
 
+        // 1. Published Distributions
         String statusParams = nextListParam(ctx, statuses);
 
         ctx.sql.append("published_distributions AS ( ")
@@ -275,12 +263,12 @@ public class DistributionSearchGenerationSQL {
                 .append("  FROM metadata_catalogue.distribution d ")
                 .append("  JOIN metadata_catalogue.versioningstatus v ON d.version_id = v.version_id ")
                 .append("  WHERE v.status IN ").append(statusParams);
-
         if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
             ctx.sql.append(" AND v.editor_id = ").append(nextParam(ctx, user.getAuthIdentifier()));
         }
         ctx.sql.append("), ");
 
+        // 2. DataProduct Info
         ctx.sql.append("dataproduct_info AS ( ")
                 .append("  SELECT ddp.distribution_instance_id, dp.instance_id AS dataproduct_id, dp.keywords ")
                 .append("  FROM metadata_catalogue.distribution_dataproduct ddp ")
@@ -291,12 +279,10 @@ public class DistributionSearchGenerationSQL {
             ctx.sql.append(" JOIN metadata_catalogue.dataproduct_temporal dpt ON dp.instance_id = dpt.dataproduct_instance_id ")
                     .append(" JOIN metadata_catalogue.temporal t ON dpt.temporal_instance_id = t.instance_id ");
         }
-
         if (!scienceDomains.isEmpty()) {
             ctx.sql.append(" JOIN metadata_catalogue.dataproduct_category dpc ON dp.instance_id = dpc.dataproduct_instance_id ")
                     .append(" JOIN metadata_catalogue.category c_sd ON dpc.category_instance_id = c_sd.instance_id ");
         }
-
         if (!organizations.isEmpty()) {
             ctx.sql.append(" LEFT JOIN metadata_catalogue.dataproduct_publisher dpp ON dp.instance_id = dpp.dataproduct_instance_id ")
                     .append(" LEFT JOIN metadata_catalogue.organization o_pub ON dpp.organization_instance_id = o_pub.instance_id ");
@@ -305,20 +291,19 @@ public class DistributionSearchGenerationSQL {
         ctx.sql.append("  WHERE ddp.distribution_instance_id IN (SELECT instance_id FROM published_distributions) ")
                 .append("    AND v.status = 'PUBLISHED' ");
 
+        // Filtri Standard (Date, Domini, Keywords esplicite)
         if (startDate != null) {
             ctx.sql.append(" AND (t.endDate IS NULL OR t.endDate >= CAST(").append(nextParam(ctx, startDate)).append(" AS timestamp)) ");
         }
         if (endDate != null) {
             ctx.sql.append(" AND (t.startDate IS NULL OR t.startDate <= CAST(").append(nextParam(ctx, endDate)).append(" AS timestamp)) ");
         }
-
         if (!scienceDomains.isEmpty()) {
             String sdParams = nextListParam(ctx, scienceDomains);
             ctx.sql.append(" AND (c_sd.uid IN ").append(sdParams).append(" OR c_sd.instance_id IN ").append(sdParams).append(") ");
         }
-
-        // Apply Extended Keyword Filter (includes 'q' tokens)
         if (!keywords.isEmpty()) {
+            // Qui usiamo solo le keyword passate esplicitamente nel parametro &keywords=...
             ctx.sql.append(" AND ( ");
             for (int i = 0; i < keywords.size(); i++) {
                 if (i > 0) ctx.sql.append(" OR ");
@@ -326,9 +311,9 @@ public class DistributionSearchGenerationSQL {
             }
             ctx.sql.append(" ) ");
         }
-
         ctx.sql.append("), ");
 
+        // 3. WebService Info
         ctx.sql.append("webservice_info AS ( ")
                 .append("  SELECT wd.distribution_instance_id, ws.instance_id AS webservice_id, ws.provider AS provider_id ")
                 .append("  FROM metadata_catalogue.webservice_distribution wd ")
@@ -367,6 +352,7 @@ public class DistributionSearchGenerationSQL {
                 .append("  GROUP BY od.distribution_instance_id ")
                 .append("), ");
 
+        // 5. Filtered IDs
         ctx.sql.append("filtered_ids AS ( ");
         boolean hasWsFilter = !serviceTypes.isEmpty();
         boolean hasOrgFilter = !organizations.isEmpty();
@@ -391,6 +377,7 @@ public class DistributionSearchGenerationSQL {
         }
         ctx.sql.append("), ");
 
+        // 6. Aggregations (CTE)
         ctx.sql.append("dist_titles AS ( ")
                 .append(" SELECT dt.distribution_instance_id, STRING_AGG(dt.title, ';' ORDER BY dt.lang) AS title ")
                 .append(" FROM metadata_catalogue.distribution_title dt ")
@@ -526,11 +513,29 @@ public class DistributionSearchGenerationSQL {
                 .append("LEFT JOIN webservice_spatial_agg wsa ON pd.instance_id = wsa.distribution_instance_id ")
                 .append("LEFT JOIN operation_services os ON pd.instance_id = os.distribution_instance_id ");
 
+        // === ADVANCED FREE TEXT SEARCH ===
+        // Splits 'q' into tokens and searches each token in Title OR Description OR Keywords
         if (q != null && !q.trim().isEmpty()) {
-            String qParam = nextParam(ctx, "%" + q + "%");
-            ctx.sql.append(" WHERE (dt.title ILIKE ").append(qParam)
-                    .append(" OR dd.description ILIKE ").append(qParam)
-                    .append(" OR ARRAY_TO_STRING(dk.keywords, ' ') ILIKE ").append(qParam).append(") ");
+            String[] tokens = q.split("[\\s,;]+");
+            List<String> validTokens = Arrays.stream(tokens)
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toList());
+
+            if (!validTokens.isEmpty()) {
+                ctx.sql.append(" WHERE ");
+                for (int k = 0; k < validTokens.size(); k++) {
+                    if (k > 0) ctx.sql.append(" AND "); // AND logic: all words must be found (Google-style)
+
+                    String tokenParam = nextParam(ctx, "%" + validTokens.get(k) + "%");
+
+                    // Search in Title OR Description OR Keywords (array converted to string)
+                    ctx.sql.append(" (dt.title ILIKE ").append(tokenParam)
+                            .append(" OR dd.description ILIKE ").append(tokenParam)
+                            .append(" OR ARRAY_TO_STRING(dk.keywords, ' ') ILIKE ").append(tokenParam)
+                            .append(") ");
+                }
+            }
         }
 
         ctx.sql.append(" ORDER BY pd.instance_id ");
