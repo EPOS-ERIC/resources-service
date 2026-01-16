@@ -13,6 +13,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 
 import org.apache.commons.codec.digest.DigestUtils;
+import org.epos.api.facets.Facets;
 import org.epos.eposdatamodel.User;
 import org.epos.api.beans.*;
 import org.epos.api.beans.DiscoveryItem.DiscoveryItemBuilder;
@@ -20,7 +21,6 @@ import org.epos.api.core.DataServiceProviderGeneration;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.core.ZabbixExecutor;
 import org.epos.api.enums.AvailableFormatType;
-import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
 import org.epos.api.facets.Node;
 import org.epos.eposdatamodel.Organization;
@@ -237,12 +237,30 @@ public class DistributionSearchGenerationSQL {
     private static QueryContext buildDynamicSQL(Map<String, Object> parameters, User user) {
         QueryContext ctx = new QueryContext();
 
+        // 1. Base Parameters
         List<String> statuses = getStatusList(parameters, user);
         List<String> organizations = getListParam(parameters, "organisations");
-        List<String> keywords = cleanKeywords(getListParam(parameters, "keywords"));
         List<String> scienceDomains = getListParam(parameters, PARAMETER__SCIENCE_DOMAIN);
         List<String> serviceTypes = getListParam(parameters, PARAMETER__SERVICE_TYPE);
+
+        // 2. Keywords Management: Merge 'keywords' param + split 'q' param
+        List<String> keywords = new ArrayList<>(cleanKeywords(getListParam(parameters, "keywords")));
         String q = (String) parameters.get("q");
+
+        // === FIX: Split 'q' into tokens and add to keyword list ===
+        if (q != null && !q.trim().isEmpty()) {
+            // Split by whitespace, comma, semicolon
+            String[] qTokens = q.split("[\\s,;]+");
+            for (String token : qTokens) {
+                if (token != null && !token.trim().isEmpty()) {
+                    String cleanToken = token.trim().toLowerCase();
+                    // Add only if not already present to avoid duplication in SQL params
+                    if (!keywords.contains(cleanToken)) {
+                        keywords.add(cleanToken);
+                    }
+                }
+            }
+        }
 
         Timestamp startDate = parseDateParam(parameters.get("schema:startDate"));
         Timestamp endDate = parseDateParam(parameters.get("schema:endDate"));
@@ -299,6 +317,7 @@ public class DistributionSearchGenerationSQL {
             ctx.sql.append(" AND (c_sd.uid IN ").append(sdParams).append(" OR c_sd.instance_id IN ").append(sdParams).append(") ");
         }
 
+        // Apply Extended Keyword Filter (includes 'q' tokens)
         if (!keywords.isEmpty()) {
             ctx.sql.append(" AND ( ");
             for (int i = 0; i < keywords.size(); i++) {
@@ -336,7 +355,7 @@ public class DistributionSearchGenerationSQL {
         }
         ctx.sql.append("), ");
 
-        // 4. Operation Services (Extracts WMS/WFS/WMTS from mapping variables)
+        // 4. Operation Services
         ctx.sql.append("operation_services AS ( ")
                 .append("  SELECT od.distribution_instance_id, STRING_AGG(DISTINCT UPPER(COALESCE(e.value, m.defaultvalue)), ',') AS service_values ")
                 .append("  FROM metadata_catalogue.operation_distribution od ")
@@ -565,9 +584,8 @@ public class DistributionSearchGenerationSQL {
             String operationReturnsJson = (String) row[i++];
             String keywordsJson = (String) row[i++];
             String spatialLocationsStr = (String) row[i++];
-            String serviceValues = (String) row[i++]; // From operation_services
+            String serviceValues = (String) row[i++];
 
-            // Spatial Filter Logic
             if (inputGeometry != null) {
                 boolean intersects = false;
                 if (spatialLocationsStr != null && !spatialLocationsStr.isEmpty()) {
@@ -581,7 +599,7 @@ public class DistributionSearchGenerationSQL {
                                 break;
                             }
                         } catch (Exception e) {
-                            // ignore invalid geometry
+                            // ignore
                         }
                     }
                 }
@@ -594,7 +612,6 @@ public class DistributionSearchGenerationSQL {
             String[] operationReturns = parseJsonStringArray(operationReturnsJson);
             String[] keywordsArray = parseJsonStringArray(keywordsJson);
 
-            // Clean keywords
             if (keywordsArray != null) {
                 for (String kw : keywordsArray) {
                     if (kw != null && !kw.trim().isEmpty()) {
@@ -744,7 +761,6 @@ public class DistributionSearchGenerationSQL {
                                                                String serviceValues) {
         List<AvailableFormat> formats = new ArrayList<>();
 
-        // Case 1: Download
         if (downloadUrls != null && downloadUrls.length > 0 && originalFormat != null) {
             String[] uri = originalFormat.split("/");
             String format = uri[uri.length - 1];
@@ -753,7 +769,6 @@ public class DistributionSearchGenerationSQL {
                     .label(format.toUpperCase()).type(AvailableFormatType.ORIGINAL).build());
         }
 
-        // Case 2: Plugins
         try {
             if (DatabaseConnections.getInstance().getPlugins().containsKey(instanceId)) {
                 for (Plugin.Relations relation : DatabaseConnections.getInstance().getPlugins().get(instanceId)) {
@@ -781,7 +796,6 @@ public class DistributionSearchGenerationSQL {
             LOGGER.warn("Error processing plugins for instance {}: {}", instanceId, e.getMessage());
         }
 
-        // Case 3: OGC & Encodings (Mappings)
         try {
             if (availableFormatsJson != null && !availableFormatsJson.equals("[]")) {
                 JsonNode arrayNode = objectMapper.readTree(availableFormatsJson);
@@ -797,7 +811,6 @@ public class DistributionSearchGenerationSQL {
                     String variableLower = variable != null ? variable.toLowerCase() : "";
                     String defaultValueLower = defaultValue != null ? defaultValue.toLowerCase() : "";
 
-                    // Robust OGC Detection: Check template AND extracted service variable mappings
                     boolean isWMS = templateLower.contains("service=wms")
                             || (variableLower.equals("service") && (paramValue.contains("WMS") || defaultValueLower.contains("wms")))
                             || (serviceValues != null && serviceValues.contains("WMS"));
@@ -839,7 +852,6 @@ public class DistributionSearchGenerationSQL {
             LOGGER.warn("Error parsing encoding formats: {}", e.getMessage());
         }
 
-        // Case 4: Returns
         if (formats.isEmpty() && operationReturns != null) {
             for (String ret : operationReturns) {
                 if (ret != null) {
