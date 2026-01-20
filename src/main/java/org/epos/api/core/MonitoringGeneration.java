@@ -60,15 +60,10 @@ public class MonitoringGeneration {
 				if (distribution.getParameters() != null) {
 					distribution.getParameters().forEach(p -> {
 						if (p.getDefaultValue() != null) {
-							if (p.getProperty() != null && p.getValuePattern() != null) {
-								if (p.getProperty().equals("schema:startDate")
-										|| p.getProperty().equals("schema:endDate")) {
-									parametersMap.put(p.getName(), Utils.convertDateUsingPattern(p.getDefaultValue(),
-											null, p.getValuePattern()));
-								}
-							} else {
+							if (p.getValue() != null && !p.getValue().isEmpty())
+								parametersMap.put(p.getName(),URLGeneration.encodeValue(p.getValue()));
+							if (p.getDefaultValue() != null && p.getValue() == null && p.isRequired())
 								parametersMap.put(p.getName(), URLGeneration.encodeValue(p.getDefaultValue()));
-							}
 						}
 					});
 				}
