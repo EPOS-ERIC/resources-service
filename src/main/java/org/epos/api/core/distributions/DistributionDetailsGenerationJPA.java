@@ -543,7 +543,7 @@ public class DistributionDetailsGenerationJPA {
         if (ws != null && ws.getContactPoint() != null && !ws.getContactPoint().isEmpty()) {
             distribution.getAvailableContactPoints().add(
                     new AvailableContactPointsBuilder()
-                            .href(EnvironmentVariables.API_HOST + EMAIL_SENDER + ws.getInstanceId() +
+                            .href(EnvironmentVariables.API_HOST + EMAIL_SENDER + distribution.getId() +
                                     "&contactType=" + ProviderType.SERVICEPROVIDERS)
                             .type(ProviderType.SERVICEPROVIDERS)
                             .build()
@@ -553,7 +553,7 @@ public class DistributionDetailsGenerationJPA {
         if (dp.getContactPoint() != null && !dp.getContactPoint().isEmpty()) {
             distribution.getAvailableContactPoints().add(
                     new AvailableContactPointsBuilder()
-                            .href(EnvironmentVariables.API_HOST + EMAIL_SENDER + dp.getInstanceId() +
+                            .href(EnvironmentVariables.API_HOST + EMAIL_SENDER + distribution.getId() +
                                     "&contactType=" + ProviderType.DATAPROVIDERS)
                             .type(ProviderType.DATAPROVIDERS)
                             .build()
