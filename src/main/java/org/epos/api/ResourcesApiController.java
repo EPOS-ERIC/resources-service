@@ -224,7 +224,7 @@ public class ResourcesApiController extends ApiController implements ResourcesAp
 	public ResponseEntity<List<OrganizationBean>> organisationUsingGet(@Parameter(in = ParameterIn.QUERY, description = "the id of organisation" ,required=false,schema=@Schema()) @Valid @RequestParam(value = "id", required = false) String id,
 			@Parameter(in = ParameterIn.QUERY, description = "q" ,schema=@Schema()) @Valid @RequestParam(value = "q", required = false) String q, 
 			@Parameter(in = ParameterIn.QUERY, description = "country" ,schema=@Schema()) @Valid @RequestParam(value = "country", required = false) String country, 
-			@Parameter(in = ParameterIn.QUERY, description = "type of organization, comma separated values from the following list {dataproviders, serviceproviders, facilitiesproviders}" ,schema=@Schema()) @Valid @RequestParam(value = "type", required = false) String type) {
+			@Parameter(in = ParameterIn.QUERY, description = "type of organization, comma separated values from the following list {dataproviders, serviceproviders}" ,schema=@Schema()) @Valid @RequestParam(value = "type", required = false) String type) {
 		Map<String,Object> requestParams = new HashMap<String, Object>();
 		if(id!=null) {
 			try {

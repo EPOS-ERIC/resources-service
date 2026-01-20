@@ -71,11 +71,11 @@ public class OrganisationsGeneration {
                         }
                     }
                 });
-                if(parameters.get("type").toString().toLowerCase().contains("facilitiesproviders")) {
-                    organizationsEntityIds.addAll(organisations.stream()
-                            .filter(org -> org.getOwns()!=null)
-                            .collect(Collectors.toList()));
-                }
+//                if(parameters.get("type").toString().toLowerCase().contains("facilitiesproviders")) {  //COMMENTED OUT BECAUSE NO MORE FILTERS EXISTS
+//                    organizationsEntityIds.addAll(organisations.stream()
+//                            .filter(org -> org.getOwns()!=null)
+//                            .collect(Collectors.toList()));
+//                }
 
                 List<DataServiceProvider> providers = DataServiceProviderGeneration.getProviders(new ArrayList<Organization>(organizationsEntityIds));
                 List<String> providersInstanceIds = new ArrayList<String>();
