@@ -241,10 +241,7 @@ public class FacilityFilterSearch {
                         return false;
                     }
 
-                    Set<String> facKeywords = Arrays.stream(fac.getKeywords().split(","))
-                            .map(String::toLowerCase)
-                            .map(String::trim)
-                            .collect(Collectors.toSet());
+                    Set<String> facKeywords = new HashSet<>(fac.getKeywords());
 
                     return !Collections.disjoint(facKeywords, keywordSet);
                 })
@@ -271,10 +268,7 @@ public class FacilityFilterSearch {
 
             // Check keywords
             if (edmFacility.getKeywords() != null) {
-                List<String> dataproductKeywords = Arrays.stream(edmFacility.getKeywords().split(","))
-                        .map(String::toLowerCase)
-                        .map(String::trim)
-                        .collect(Collectors.toList());
+                List<String> dataproductKeywords = edmFacility.getKeywords();
 
                 qSMap.keySet().forEach(q -> {
                     if (dataproductKeywords.contains(q)) {

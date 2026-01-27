@@ -82,7 +82,7 @@ public class FacilityDetailsItemGenerationJPA {
 			facility.setHref(EnvironmentVariables.API_HOST + API_PATH_DETAILS + facilitySelected.getMetaId());
 
 
-            List<String> keywords = Arrays.stream(Optional.ofNullable(facilitySelected.getKeywords()).orElse("").split(",\t")).map(String::toLowerCase).map(String::trim).collect(Collectors.toList());
+            List<String> keywords =facilitySelected.getKeywords();
 			
 			keywords.removeAll(Collections.singleton(null));
 			keywords.removeAll(Collections.singleton(""));

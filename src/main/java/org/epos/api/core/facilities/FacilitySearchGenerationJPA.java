@@ -168,8 +168,7 @@ public class FacilitySearchGenerationJPA {
 					.categories(categoryList.isEmpty() ? null : categoryList)
 					.build();
 
-			keywords.addAll(Arrays.stream(Optional.ofNullable(facility.getKeywords()).orElse("").split(",\t"))
-					.map(String::toLowerCase).map(String::trim).collect(Collectors.toList()));
+			keywords.addAll(facility.getKeywords());
 
 			// Facility Types
 			categoriesFromDB
