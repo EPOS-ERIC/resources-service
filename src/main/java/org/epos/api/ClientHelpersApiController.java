@@ -343,8 +343,9 @@ public class ClientHelpersApiController extends ApiController implements ClientH
 	@Override
 	public ResponseEntity<SearchResponse> facilitySearchUsingGet(@Valid String q, @Valid String bbox,
 			@Valid String keywords, @Valid String facilitytypes, @Valid String equipmenttypes,
-			@Valid String organisations, @Valid String facetsType, @Valid Boolean facets) {
+			@Valid String organisations, @Valid String facetsType, @Valid Boolean facets, @Valid String versioningStatus) {
 		Map<String, Object> requestParameters = new HashMap<>();
+		User user = getUserFromSession();
 
 		if (!StringUtils.isBlank(q)) {
 			try {
@@ -447,7 +448,19 @@ public class ClientHelpersApiController extends ApiController implements ClientH
 			requestParameters.put("facetstype", facetsType);
 		}
 
-		return standardRequest("FACILITYSEARCH", requestParameters, null);
+		if (!StringUtils.isBlank(versioningStatus)) {
+			try {
+				versioningStatus = java.net.URLDecoder.decode(versioningStatus, StandardCharsets.UTF_8.name());
+				versioningStatus = versioningStatus.replace(" ", "").toUpperCase();
+			} catch (UnsupportedEncodingException e) {
+				LOGGER.warn(A_PROBLEM_WAS_ENCOUNTERED_DECODING + "versioningStatus: " + versioningStatus, e);
+				SearchResponse errorResponse = new SearchResponse(e.getLocalizedMessage());
+				return ResponseEntity.badRequest().body(errorResponse);
+			}
+			requestParameters.put("versioningStatus", versioningStatus);
+		}
+
+		return standardRequest("FACILITYSEARCH", requestParameters, user);
 	}
 
 	/**
@@ -563,8 +576,21 @@ public class ClientHelpersApiController extends ApiController implements ClientH
 	}
 
 	@Override
-	public ResponseEntity<SearchResponse> searchSoftware(String query) {
-		var response = SoftwareSearch.generate(query);
+	public ResponseEntity<SearchResponse> searchSoftware(String query, String versioningStatus) {
+		User user = getUserFromSession();
+
+		if (!StringUtils.isBlank(versioningStatus)) {
+			try {
+				versioningStatus = java.net.URLDecoder.decode(versioningStatus, StandardCharsets.UTF_8.name());
+				versioningStatus = versioningStatus.replace(" ", "").toUpperCase();
+			} catch (UnsupportedEncodingException e) {
+				LOGGER.warn(A_PROBLEM_WAS_ENCOUNTERED_DECODING + "versioningStatus: " + versioningStatus, e);
+				SearchResponse errorResponse = new SearchResponse(e.getLocalizedMessage());
+				return ResponseEntity.badRequest().body(errorResponse);
+			}
+		}
+
+		var response = SoftwareSearch.generate(query, user, versioningStatus);
 		return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(response);
 	}
 

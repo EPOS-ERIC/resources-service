@@ -33,6 +33,7 @@ import org.epos.eposdatamodel.Equipment;
 import org.epos.eposdatamodel.Facility;
 import org.epos.eposdatamodel.LinkedEntity;
 import org.epos.eposdatamodel.Organization;
+import org.epos.eposdatamodel.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,7 +53,7 @@ public class FacilitySearchGenerationJPA {
 	private static final String PARAMETER_FACILITY_TYPES = "facilitytypes";
 	private static final String PARAMETER_EQUIPMENT_TYPES = "equipmenttypes";
 
-	public static SearchResponse generate(Map<String, Object> parameters) {
+	public static SearchResponse generate(Map<String, Object> parameters, User user) {
 
 		LOGGER.info("Requests start - JPA method");
 
@@ -63,8 +64,37 @@ public class FacilitySearchGenerationJPA {
 		List<Organization> organizationForOwners = (List<Organization>) AbstractAPI.retrieveAPI(EntityNames.ORGANIZATION.name()).retrieveAll();
 		List<Category> categoriesFromDB = (List<Category>) AbstractAPI.retrieveAPI(EntityNames.CATEGORY.name()).retrieveAll();
 
+		List<String> statuses = new ArrayList<>();
+		if (user != null && parameters.get("versioningStatus") != null
+				&& !parameters.get("versioningStatus").toString().isEmpty()) {
+			statuses.addAll(Arrays.asList(parameters.get("versioningStatus").toString().split(",")));
+		} else {
+			statuses.add(StatusType.PUBLISHED.name());
+		}
+
+		facilities = facilities.stream()
+				.filter(f -> statuses.contains(f.getStatus().name()))
+				.filter(f -> {
+					if (user != null && !user.getIsAdmin() && parameters.get("versioningStatus") != null) {
+						return StatusType.PUBLISHED.equals(f.getStatus())
+								|| user.getAuthIdentifier().equals(f.getEditorId());
+					}
+					return true;
+				})
+				.collect(Collectors.toList());
+
+		equipments = equipments.stream()
+				.filter(e -> statuses.contains(e.getStatus().name()))
+				.filter(e -> {
+					if (user != null && !user.getIsAdmin() && parameters.get("versioningStatus") != null) {
+						return StatusType.PUBLISHED.equals(e.getStatus())
+								|| user.getAuthIdentifier().equals(e.getEditorId());
+					}
+					return true;
+				})
+				.collect(Collectors.toList());
+
 		LOGGER.info("Apply filter using input parameters: " + parameters.toString());
-		// TODO for facility
 		facilities = FacilityFilterSearch.doFilters(facilities, parameters, categoriesFromDB, organizationForOwners);
 
 		Set<DiscoveryItem> discoveryMap = new HashSet<DiscoveryItem>();
@@ -75,8 +105,16 @@ public class FacilitySearchGenerationJPA {
 		Set<Category> facilityTypes = new HashSet<>();
 		Set<Category> equipmentTypes = new HashSet<>();
 
-		List<DataProduct> dataProducts = ((List<DataProduct>) AbstractAPI.retrieveAPI(EntityNames.DATAPRODUCT.name()).retrieveAll()).stream()
-				.filter(d -> d.getStatus().equals(StatusType.PUBLISHED))
+		List<DataProduct> dataProducts = ((List<DataProduct>) AbstractAPI.retrieveAPI(EntityNames.DATAPRODUCT.name())
+				.retrieveAll()).stream()
+				.filter(d -> statuses.contains(d.getStatus().name()))
+				.filter(d -> {
+					if (user != null && !user.getIsAdmin() && parameters.get("versioningStatus") != null) {
+						return StatusType.PUBLISHED.equals(d.getStatus())
+								|| user.getAuthIdentifier().equals(d.getEditorId());
+					}
+					return true;
+				})
 				.collect(Collectors.toList());
 
 		// get all the distributions that have a category that is a facility category
@@ -122,6 +160,12 @@ public class FacilitySearchGenerationJPA {
 							// .dataProvider(facetsDataProviders)
 							// .serviceProvider(facetsServiceProviders)
 							.categories(Arrays.asList(category.get().getUid()))
+							.versioningStatus(user != null && parameters.containsKey("versioningStatus")
+									? distribution.getStatus().name()
+									: null)
+							.editorId(user != null && parameters.containsKey("versioningStatus")
+									? distribution.getEditorId()
+									: null)
 							.build();
 					discoveryMap.add(discoveryItem);
 				}
@@ -166,6 +210,8 @@ public class FacilitySearchGenerationJPA {
 							.build()))
 					.facilityProvider(facetsFacilityProviders)
 					.categories(categoryList.isEmpty() ? null : categoryList)
+					.versioningStatus(user != null && parameters.containsKey("versioningStatus") ? facility.getStatus().name() : null)
+					.editorId(user != null && parameters.containsKey("versioningStatus") ? facility.getEditorId() : null)
 					.build();
 
 			keywords.addAll(facility.getKeywords());

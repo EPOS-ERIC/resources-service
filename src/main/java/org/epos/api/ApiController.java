@@ -17,13 +17,10 @@ package org.epos.api;
  ******************************************************************************/
 
 import java.util.Map;
-import jakarta.servlet.http.HttpServletRequest;
 
-import org.apache.commons.lang3.StringUtils;
 import org.epos.api.core.MonitoringGeneration;
 import org.epos.api.core.distributions.DistributionDetailsExtendedGenerationJPA;
 import org.epos.api.core.distributions.DistributionDetailsGenerationJPA;
-import org.epos.api.core.distributions.DistributionSearchGenerationJPA;
 import org.epos.api.core.distributions.DistributionSearchGenerationSQL;
 import org.epos.api.core.facilities.EquipmentsDetailsItemGenerationJPA;
 import org.epos.api.core.facilities.FacilityDetailsItemGenerationJPA;
@@ -39,6 +36,8 @@ import org.springframework.http.ResponseEntity;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonSyntaxException;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 abstract class ApiController<T> {
 
@@ -65,7 +64,7 @@ abstract class ApiController<T> {
 				response = Utils.gson.toJson(DistributionDetailsGenerationJPA.generate(requestParams));
 			break;
 		case "FACILITYSEARCH":
-			response = Utils.gson.toJson(FacilitySearchGenerationJPA.generate(requestParams));
+			response = Utils.gson.toJson(FacilitySearchGenerationJPA.generate(requestParams, user));
 			break;
 		case "FACILITYDETAILS":
 			response = Utils.gson.toJson(FacilityDetailsItemGenerationJPA.generate(requestParams));

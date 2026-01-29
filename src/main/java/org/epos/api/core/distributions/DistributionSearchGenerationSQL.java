@@ -264,7 +264,7 @@ public class DistributionSearchGenerationSQL {
                 .append("  JOIN metadata_catalogue.versioningstatus v ON d.version_id = v.version_id ")
                 .append("  WHERE v.status IN ").append(statusParams);
         if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
-            ctx.sql.append(" AND v.editor_id = ").append(nextParam(ctx, user.getAuthIdentifier()));
+			ctx.sql.append(" AND (v.status != 'DRAFT' OR v.editor_id = ").append(nextParam(ctx, user.getAuthIdentifier())).append(")");
         }
         ctx.sql.append("), ");
 
@@ -289,7 +289,7 @@ public class DistributionSearchGenerationSQL {
         }
 
         ctx.sql.append("  WHERE ddp.distribution_instance_id IN (SELECT instance_id FROM published_distributions) ")
-                .append("    AND v.status = 'PUBLISHED' ");
+                .append("    AND v.status IN ").append(statusParams);
 
         // Filtri Standard (Date, Domini, Keywords esplicite)
         if (startDate != null) {

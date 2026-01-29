@@ -30,6 +30,7 @@ import org.epos.eposdatamodel.Distribution;
 import org.epos.eposdatamodel.LinkedEntity;
 import org.epos.eposdatamodel.SoftwareApplication;
 import org.epos.eposdatamodel.SoftwareSourceCode;
+import org.epos.eposdatamodel.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,19 +44,20 @@ public class SoftwareSearch {
 	private static final String API_PATH_DETAILS = EnvironmentVariables.API_CONTEXT + "/software/details/";
 	private static final Pattern FORMAT_PATTERN = Pattern.compile("\\.([a-zA-Z0-9]+)(?:/|$|\\?)");
 
-	public static SearchResponse generate(String query) {
-		LOGGER.info("Generating discovery items with query {}", query);
+	public static SearchResponse generate(String query, User user, String versioningStatus) {
+		LOGGER.info("Generating discovery items with query {}, status {}, user {}", query, versioningStatus,
+				user != null ? user.getAuthIdentifier() : "public");
 		long startTime = System.currentTimeMillis();
 
-		DataCollector dataCollector = new DataCollector();
+		DataCollector dataCollector = new DataCollector(user, versioningStatus);
 		Set<DiscoveryItem> discoveryItems = new HashSet<>();
 		Set<String> keywords = new HashSet<>();
 
-		processDataProducts(query, dataCollector, discoveryItems);
+		processDataProducts(query, dataCollector, discoveryItems, user, versioningStatus);
 
-		processSoftwareSourceCodes(query, dataCollector.softwareSourceCodes, discoveryItems, keywords);
+		processSoftwareSourceCodes(query, dataCollector.softwareSourceCodes, discoveryItems, keywords, user, versioningStatus);
 
-		processSoftwareApplications(query, dataCollector.softwareApplications, discoveryItems, keywords);
+		processSoftwareApplications(query, dataCollector.softwareApplications, discoveryItems, keywords, user, versioningStatus);
 
 		SearchResponse response = buildSearchResponse(discoveryItems, keywords);
 
@@ -67,7 +69,9 @@ public class SoftwareSearch {
 	private static void processDataProducts(
 			String query,
 			DataCollector dataCollector,
-			Set<DiscoveryItem> discoveryItems) {
+			Set<DiscoveryItem> discoveryItems,
+			User user,
+			String versioningStatus) {
 		for (DataProduct dataProduct : dataCollector.dataProducts) {
 			if (dataProduct == null
 					|| dataProduct.getTitle().isEmpty()
@@ -90,7 +94,7 @@ public class SoftwareSearch {
 					continue;
 				}
 
-				addDistributionsToDiscovery(dataProduct, category.get(), discoveryItems);
+				addDistributionsToDiscovery(dataProduct, category.get(), discoveryItems, user, versioningStatus);
 			}
 		}
 	}
@@ -99,7 +103,9 @@ public class SoftwareSearch {
 			String query,
 			List<SoftwareSourceCode> softwareSourceCodes,
 			Set<DiscoveryItem> discoveryItems,
-			Set<String> keywords) {
+			Set<String> keywords,
+			User user,
+			String versioningStatus) {
 		for (SoftwareSourceCode software : softwareSourceCodes) {
 			if (!matchesQuery(query, software.getName(), software.getDescription())) {
 				continue;
@@ -118,7 +124,11 @@ public class SoftwareSearch {
 					software.getName(),
 					software.getDescription(),
 					formats,
-					categoryList);
+					categoryList,
+					user,
+					versioningStatus,
+					software.getStatus().name(),
+					software.getEditorId());
 
 			addKeywordsFromSoftware(software.getKeywords(), keywords);
 			discoveryItems.add(discoveryItem);
@@ -129,12 +139,13 @@ public class SoftwareSearch {
 			String query,
 			List<SoftwareApplication> softwareApplications,
 			Set<DiscoveryItem> discoveryItems,
-			Set<String> keywords) {
+			Set<String> keywords,
+			User user,
+			String versioningStatus) {
 		for (SoftwareApplication software : softwareApplications) {
 			if (!matchesQuery(query, software.getName(), software.getDescription())) {
 				continue;
 			}
-
 			if (software.getCategory() == null) {
 				LOGGER.warn("software application {} doesn't have a category set", software.getUid());
 				continue;
@@ -148,7 +159,11 @@ public class SoftwareSearch {
 					software.getName(),
 					software.getDescription(),
 					formats,
-					categoryList);
+					categoryList,
+					user,
+					versioningStatus,
+					software.getStatus().name(),
+					software.getEditorId());
 
 			addKeywordsFromSoftware(software.getKeywords(), keywords);
 			discoveryItems.add(discoveryItem);
@@ -167,7 +182,7 @@ public class SoftwareSearch {
 	}
 
 	private static void addDistributionsToDiscovery(DataProduct dataProduct, Category category,
-			Set<DiscoveryItem> discoveryItems) {
+			Set<DiscoveryItem> discoveryItems, User user, String versioningStatus) {
 		for (var distributionEntity : dataProduct.getDistribution()) {
 			Distribution distribution = (Distribution) AbstractAPI.retrieveAPI(EntityNames.DISTRIBUTION.name())
 					.retrieve(distributionEntity.getInstanceId());
@@ -176,7 +191,7 @@ public class SoftwareSearch {
 				continue;
 			}
 
-			DiscoveryItem discoveryItem = new DiscoveryItemBuilder(
+			DiscoveryItemBuilder builder = new DiscoveryItemBuilder(
 					distribution.getInstanceId(),
 					EnvironmentVariables.API_HOST + API_PATH_DETAILS + distribution.getInstanceId(),
 					null)
@@ -187,10 +202,14 @@ public class SoftwareSearch {
 							? String.join(";", distribution.getDescription())
 							: null)
 					.availableFormats(AvailableFormatsGeneration.generate(distribution))
-					.categories(Arrays.asList(category.getUid()))
-					.build();
+					.categories(Arrays.asList(category.getUid()));
 
-			discoveryItems.add(discoveryItem);
+			if (user != null && versioningStatus != null) {
+				builder.versioningStatus(distribution.getStatus().name())
+						.editorId(distribution.getEditorId());
+			}
+
+			discoveryItems.add(builder.build());
 		}
 	}
 
@@ -251,16 +270,26 @@ public class SoftwareSearch {
 			String name,
 			String description,
 			List<AvailableFormat> formats,
-			List<String> categoryList) {
-		return new DiscoveryItemBuilder(instanceId,
+			List<String> categoryList,
+			User user,
+			String versioningStatus,
+			String status,
+			String editorId) {
+		DiscoveryItemBuilder builder = new DiscoveryItemBuilder(instanceId,
 				EnvironmentVariables.API_HOST + API_PATH_DETAILS + instanceId, null)
 				.uid(uid)
 				.title(name)
 				.description(description)
 				.sha256id(DigestUtils.sha256Hex(uid))
 				.availableFormats(formats)
-				.categories(categoryList.isEmpty() ? null : categoryList)
-				.build();
+				.categories(categoryList.isEmpty() ? null : categoryList);
+
+		if (user != null && versioningStatus != null) {
+			builder.versioningStatus(status)
+					.editorId(editorId);
+		}
+
+		return builder.build();
 	}
 
 	private static void addKeywordsFromSoftware(String keywordsString, Set<String> keywords) {
@@ -298,7 +327,8 @@ public class SoftwareSearch {
 	}
 
 	private static boolean matchesQuery(String query, String title, String description) {
-		if (query == null || query.isEmpty() || title == null || title.isEmpty() || description == null || description.isEmpty())
+		if (query == null || query.isEmpty() || title == null || title.isEmpty() || description == null
+				|| description.isEmpty())
 			return true;
 		String lowerQuery = query.toLowerCase();
 		return title.toLowerCase().contains(lowerQuery) || description.toLowerCase().contains(lowerQuery);
@@ -311,20 +341,52 @@ public class SoftwareSearch {
 		final List<SoftwareSourceCode> softwareSourceCodes;
 
 		@SuppressWarnings("unchecked")
-		DataCollector() {
+		DataCollector(User user, String versioningStatus) {
+			List<String> statuses = new ArrayList<>();
+			if (user != null && versioningStatus != null && !versioningStatus.isEmpty()) {
+				statuses.addAll(Arrays.asList(versioningStatus.split(",")));
+			} else {
+				statuses.add(StatusType.PUBLISHED.name());
+			}
+
 			this.dataProducts = ((List<DataProduct>) AbstractAPI.retrieveAPI(EntityNames.DATAPRODUCT.name())
 					.retrieveAll()).stream()
-					.filter(d -> d.getStatus().equals(StatusType.PUBLISHED))
+					.filter(d -> statuses.contains(d.getStatus().name()))
+					.filter(d -> {
+						if (user != null && !user.getIsAdmin() && versioningStatus != null) {
+							return StatusType.PUBLISHED.equals(d.getStatus())
+									|| user.getAuthIdentifier().equals(d.getEditorId());
+						}
+						return true;
+					})
 					.collect(Collectors.toList());
 
 			this.categories = (List<Category>) AbstractAPI.retrieveAPI(EntityNames.CATEGORY.name())
 					.retrieveAll();
 
-			this.softwareApplications = (List<SoftwareApplication>) AbstractAPI
-					.retrieveAPI(EntityNames.SOFTWAREAPPLICATION.name()).retrieveAll();
+			this.softwareApplications = ((List<SoftwareApplication>) AbstractAPI
+					.retrieveAPI(EntityNames.SOFTWAREAPPLICATION.name()).retrieveAll()).stream()
+					.filter(s -> statuses.contains(s.getStatus().name()))
+					.filter(s -> {
+						if (user != null && !user.getIsAdmin() && versioningStatus != null) {
+							return StatusType.PUBLISHED.name().equals(s.getStatus().name())
+									|| user.getAuthIdentifier().equals(s.getEditorId());
+						}
+						return true;
+					})
+					.collect(Collectors.toList());
 
-			this.softwareSourceCodes = (List<SoftwareSourceCode>) AbstractAPI
-					.retrieveAPI(EntityNames.SOFTWARESOURCECODE.name()).retrieveAll();
+			this.softwareSourceCodes = ((List<SoftwareSourceCode>) AbstractAPI
+					.retrieveAPI(EntityNames.SOFTWARESOURCECODE.name()).retrieveAll()).stream()
+					.filter(s -> statuses.contains(s.getStatus().name()))
+					.filter(s -> {
+						if (user != null && !user.getIsAdmin() && versioningStatus != null) {
+							return StatusType.PUBLISHED.name().equals(s.getStatus().name())
+									|| user.getAuthIdentifier().equals(s.getEditorId());
+						}
+						return true;
+					})
+					.collect(Collectors.toList());
 		}
 	}
 }

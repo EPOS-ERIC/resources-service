@@ -136,7 +136,8 @@ public interface ClientHelpersApi {
 			@Parameter(in = ParameterIn.QUERY, description = "equipmenttypes", schema = @Schema()) @Valid @RequestParam(value = "equipmenttypes", required = false) String equipmenttypes,
 			@Parameter(in = ParameterIn.QUERY, description = "organisations", schema = @Schema()) @Valid @RequestParam(value = "organisations", required = false) String organisations,
 			@Parameter(in = ParameterIn.QUERY, description = "facetstype {categories, facilityprovider}", schema = @Schema()) @Valid @RequestParam(value = "facetstype", required = false) String facetsType,
-			@Parameter(in = ParameterIn.QUERY, description = "facets", schema = @Schema()) @Valid @RequestParam(value = "facets", required = false) Boolean facets);
+			@Parameter(in = ParameterIn.QUERY, description = "facets", schema = @Schema()) @Valid @RequestParam(value = "facets", required = false) Boolean facets,
+			@Parameter(in = ParameterIn.QUERY, description = "versioningStatus", schema = @Schema()) @Valid @RequestParam(value = "versioningStatus", required = false) String versioningStatus);
 
 	@Operation(summary = "metadata resources details", description = "returns detailed information useful to contextualise the discovery phase", tags = {
 			"Resources Service" })
@@ -205,7 +206,8 @@ public interface ClientHelpersApi {
 			@ApiResponse(responseCode = "404", description = "Not Found") })
 	@GetMapping(value = "/software/search", produces = { "application/json" })
 	ResponseEntity<SearchResponse> searchSoftware(
-			@Parameter(in = ParameterIn.QUERY, description = "q", schema = @Schema()) @RequestParam(value = "q", required = false) String query);
+			@Parameter(in = ParameterIn.QUERY, description = "q", schema = @Schema()) @RequestParam(value = "q", required = false) String query,
+			@Parameter(in = ParameterIn.QUERY, description = "versioningStatus", schema = @Schema()) @Valid @RequestParam(value = "versioningStatus", required = false) String versioningStatus);
 
 	@Operation(summary = "metadata software details", description = "returns detailed information useful to contextualise the software discovery phase", tags = {
 			"Resources Service" })
