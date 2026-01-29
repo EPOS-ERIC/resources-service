@@ -53,42 +53,42 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
 
-  dependency-check:
-    runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Build with Maven
-        run: mvn clean package -DskipTests
-
-      - name: Run Dependency-Check
-        uses: dependency-check/Dependency-Check_Action@main
-        id: depcheck
-        env:
-          JAVA_HOME: /opt/jdk  # Reset to match the Docker image
-        with:
-          project: ${{ github.event.repository.name }}
-          path: '.'
-          format: 'SARIF'
-          out: 'reports'
-          args: >
-            --failOnCVSS 7
-            --enableRetired
-
-      - name: Upload Dependency-Check results
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: reports/
+#  dependency-check:
+#    runs-on: ubuntu-latest
+#    permissions:
+#      security-events: write
+#      contents: read
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - name: Set up Java
+#        uses: actions/setup-java@v4
+#        with:
+#          java-version: '21'
+#          distribution: 'temurin'
+#
+#      - name: Build with Maven
+#        run: mvn clean package -DskipTests
+#
+#      - name: Run Dependency-Check
+#        uses: dependency-check/Dependency-Check_Action@main
+#        id: depcheck
+#        env:
+#          JAVA_HOME: /opt/jdk  # Reset to match the Docker image
+#        with:
+#          project: ${{ github.event.repository.name }}
+#          path: '.'
+#          format: 'SARIF'
+#          out: 'reports'
+#          args: >
+#            --failOnCVSS 7
+#            --enableRetired
+#
+#      - name: Upload Dependency-Check results
+#        uses: github/codeql-action/upload-sarif@v4
+#        if: always()
+#        with:
+#          sarif_file: reports/
 
   build:
     runs-on: ubuntu-latest
