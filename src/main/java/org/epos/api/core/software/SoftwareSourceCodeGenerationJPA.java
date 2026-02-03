@@ -20,7 +20,7 @@ import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
 import org.epos.eposdatamodel.Category;
 import org.epos.eposdatamodel.Identifier;
-import org.epos.eposdatamodel.SoftwareApplication;
+import org.epos.eposdatamodel.LinkedEntity;
 import org.epos.eposdatamodel.SoftwareSourceCode;
 
 import commonapis.LinkedEntityAPI;
@@ -40,6 +40,7 @@ public class SoftwareSourceCodeGenerationJPA {
 		// response.setDownloadURL(softwareSourceCode.getDownloadURL());
 		response.setLicenseURL(softwareSourceCode.getLicenseURL());
 		response.setMainEntityOfPage(softwareSourceCode.getMainEntityofPage());
+		response.setSoftwareRequirements(softwareSourceCode.getSoftwareRequirements());
 		response.setProgrammingLanguage(softwareSourceCode.getProgrammingLanguage());
 		response.setRuntimePlatform(softwareSourceCode.getRuntimePlatform());
 		response.setSoftwareVersion(softwareSourceCode.getSoftwareVersion());
@@ -58,6 +59,7 @@ public class SoftwareSourceCodeGenerationJPA {
 			response.setKeywords(null);
 		}
 		response.setCitation(softwareSourceCode.getCitation());
+		response.setCreator(createCreatorUids(softwareSourceCode.getCreator()));
 		response.setSize(softwareSourceCode.getSize());
 		response.setTimeRequired(softwareSourceCode.getTimeRequired());
 		response.setId(softwareSourceCode.getInstanceId());
@@ -125,6 +127,17 @@ public class SoftwareSourceCodeGenerationJPA {
 		}
 
 		return response;
+	}
+
+	private static List<String> createCreatorUids(List<LinkedEntity> creators) {
+		if (creators == null) {
+			return null;
+		}
+		List<String> creatorUids = creators.stream()
+				.map(LinkedEntity::getUid)
+				.filter(Objects::nonNull)
+				.toList();
+		return creatorUids.isEmpty() ? null : creatorUids;
 	}
 
 

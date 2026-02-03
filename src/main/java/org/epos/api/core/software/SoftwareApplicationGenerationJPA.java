@@ -20,10 +20,10 @@ import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
 import org.epos.eposdatamodel.Category;
 import org.epos.eposdatamodel.Identifier;
+import org.epos.eposdatamodel.LinkedEntity;
 import org.epos.eposdatamodel.SoftwareApplication;
 
 import commonapis.LinkedEntityAPI;
-import org.epos.eposdatamodel.SoftwareSourceCode;
 
 public class SoftwareApplicationGenerationJPA {
 
@@ -51,6 +51,7 @@ public class SoftwareApplicationGenerationJPA {
 		response.setStorageRequirements(softwareApplication.getStorageRequirements());
 		response.setCitation(softwareApplication.getCitation());
 		response.setOperatingSystem(softwareApplication.getOperatingSystem());
+		response.setCreator(createCreatorUids(softwareApplication.getCreator()));
         response.setAvailableFormats(createFormatsForApplication(softwareApplication));
 		// Split keywords by comma and return as List<String>, trimming spaces
 		String keywordsStr = softwareApplication.getKeywords();
@@ -129,6 +130,17 @@ public class SoftwareApplicationGenerationJPA {
 		}
 
 		return response;
+	}
+
+	private static List<String> createCreatorUids(List<LinkedEntity> creators) {
+		if (creators == null) {
+			return null;
+		}
+		List<String> creatorUids = creators.stream()
+				.map(LinkedEntity::getUid)
+				.filter(Objects::nonNull)
+				.toList();
+		return creatorUids.isEmpty() ? null : creatorUids;
 	}
 
     private static List<AvailableFormat> createFormatsForApplication(SoftwareApplication software) {

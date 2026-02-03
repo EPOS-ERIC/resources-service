@@ -2,10 +2,12 @@ package org.epos.api.beans.software;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import org.epos.api.beans.AvailableContactPoints;
 import org.epos.api.beans.AvailableFormat;
 import org.epos.api.facets.Node;
+import org.epos.eposdatamodel.LinkedEntity;
 import org.epos.eposdatamodel.SoftwareApplication;
 
 public class SoftwareApplicationResponse {
@@ -29,6 +31,7 @@ public class SoftwareApplicationResponse {
 	private List<String> citation;
 	private List<String> operatingSystem;
 	private List<String> keywords;
+	private List<String> creator;
 	private String id;
 	private List<String> doi;
 	private List<String> identifiers;
@@ -57,6 +60,7 @@ public class SoftwareApplicationResponse {
 		this.operatingSystem = softwareApplication.getOperatingSystem();
 		// Keywords will be set by the generation class
 		this.keywords = null;
+		this.creator = createCreatorUids(softwareApplication.getCreator());
 		this.id = softwareApplication.getInstanceId();
 		this.availableContactPoints = new ArrayList<>();
 	}
@@ -217,6 +221,14 @@ public class SoftwareApplicationResponse {
 		this.keywords = keywords;
 	}
 
+	public List<String> getCreator() {
+		return creator;
+	}
+
+	public void setCreator(List<String> creator) {
+		this.creator = creator;
+	}
+
 	public String getId() {
 		return this.id;
 	}
@@ -264,4 +276,15 @@ public class SoftwareApplicationResponse {
     public void setAvailableFormats(List<AvailableFormat> availableFormats) {
         this.availableFormats = availableFormats;
     }
+
+	private static List<String> createCreatorUids(List<LinkedEntity> creators) {
+		if (creators == null) {
+			return null;
+		}
+		List<String> creatorUids = creators.stream()
+				.map(LinkedEntity::getUid)
+				.filter(Objects::nonNull)
+				.toList();
+		return creatorUids.isEmpty() ? null : creatorUids;
+	}
 }

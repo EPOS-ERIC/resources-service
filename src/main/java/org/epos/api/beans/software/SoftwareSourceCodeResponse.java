@@ -2,10 +2,12 @@ package org.epos.api.beans.software;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import org.epos.api.beans.AvailableContactPoints;
 import org.epos.api.beans.AvailableFormat;
 import org.epos.api.facets.Node;
+import org.epos.eposdatamodel.LinkedEntity;
 import org.epos.eposdatamodel.SoftwareSourceCode;
 
 public class SoftwareSourceCodeResponse {
@@ -16,6 +18,7 @@ public class SoftwareSourceCodeResponse {
 	private String downloadURL;
 	private String licenseURL;
 	private String mainEntityOfPage;
+	private String softwareRequirements;
 	private String runtimePlatform;
 	private String softwareVersion;
 	private String softwareStatus;
@@ -26,6 +29,7 @@ public class SoftwareSourceCodeResponse {
 	private List<String> programmingLanguage;
 	private List<String> keywords;
 	private List<String> citation;
+	private List<String> creator;
 	private String id;
 	private List<String> doi;
 	private List<String> identifiers;
@@ -40,6 +44,7 @@ public class SoftwareSourceCodeResponse {
 		this.downloadURL = softwareSourceCode.getDownloadURL();
 		this.licenseURL = softwareSourceCode.getLicenseURL();
 		this.mainEntityOfPage = softwareSourceCode.getMainEntityofPage();
+		this.softwareRequirements = softwareSourceCode.getSoftwareRequirements();
 		this.programmingLanguage = softwareSourceCode.getProgrammingLanguage();
 		this.runtimePlatform = softwareSourceCode.getRuntimePlatform();
 		this.softwareVersion = softwareSourceCode.getSoftwareVersion();
@@ -49,6 +54,7 @@ public class SoftwareSourceCodeResponse {
 		// Keywords will be set by the generation class
 		this.keywords = null;
 		this.citation = softwareSourceCode.getCitation();
+		this.creator = createCreatorUids(softwareSourceCode.getCreator());
 		this.size = softwareSourceCode.getSize();
 		this.timeRequired = softwareSourceCode.getTimeRequired();
 		this.id = softwareSourceCode.getInstanceId();
@@ -139,6 +145,14 @@ public class SoftwareSourceCodeResponse {
 		this.mainEntityOfPage = mainEntityOfPage;
 	}
 
+	public String getSoftwareRequirements() {
+		return softwareRequirements;
+	}
+
+	public void setSoftwareRequirements(String softwareRequirements) {
+		this.softwareRequirements = softwareRequirements;
+	}
+
 	public List<String> getProgrammingLanguage() {
 		return programmingLanguage;
 	}
@@ -203,6 +217,14 @@ public class SoftwareSourceCodeResponse {
 		this.citation = citation;
 	}
 
+	public List<String> getCreator() {
+		return creator;
+	}
+
+	public void setCreator(List<String> creator) {
+		this.creator = creator;
+	}
+
 	public String getSize() {
 		return size;
 	}
@@ -234,4 +256,15 @@ public class SoftwareSourceCodeResponse {
     public void setAvailableFormats(List<AvailableFormat> availableFormats) {
         this.availableFormats = availableFormats;
     }
+
+	private static List<String> createCreatorUids(List<LinkedEntity> creators) {
+		if (creators == null) {
+			return null;
+		}
+		List<String> creatorUids = creators.stream()
+				.map(LinkedEntity::getUid)
+				.filter(Objects::nonNull)
+				.toList();
+		return creatorUids.isEmpty() ? null : creatorUids;
+	}
 }
