@@ -27,7 +27,7 @@ public class EnvironmentVariables {
      * Defaults to "true" (SQL implementations). Set to "false" to use JPA.
      */
     public static final boolean USE_SQL_IMPLEMENTATION = 
-            !"false".equalsIgnoreCase(System.getenv("USE_SQL_IMPLEMENTATION"));
+            "false".equalsIgnoreCase(System.getenv("USE_SQL_IMPLEMENTATION"));
 
     ///api/frontend/v1
 	
