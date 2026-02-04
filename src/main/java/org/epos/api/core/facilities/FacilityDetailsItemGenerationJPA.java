@@ -19,6 +19,7 @@ import org.epos.api.beans.SpatialInformation;
 import org.epos.api.core.DataServiceProviderGeneration;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.core.distributions.DistributionDetailsGenerationJPA;
+import org.epos.api.core.distributions.DistributionDetailsGenerationSQL;
 import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
@@ -58,7 +59,9 @@ public class FacilityDetailsItemGenerationJPA {
 		// maybe the details is for a service from the data panel
 		if (facilitySelected == null) {
 			LOGGER.info("Given id is not of a facility, checking if it's a distribution");
-			return DistributionDetailsGenerationJPA.generate(parameters, Facets.Type.FACILITY);
+			return EnvironmentVariables.USE_SQL_IMPLEMENTATION
+					? DistributionDetailsGenerationSQL.generate(parameters, Facets.Type.FACILITY)
+					: DistributionDetailsGenerationJPA.generate(parameters, Facets.Type.FACILITY);
 		}
 		List<Organization> organizationForOwners  = (List<Organization>) AbstractAPI.retrieveAPI(EntityNames.ORGANIZATION.name()).retrieveAll();
 		List<Category> categoriesFromDB = (List<Category>) AbstractAPI.retrieveAPI(EntityNames.CATEGORY.name()).retrieveAll();

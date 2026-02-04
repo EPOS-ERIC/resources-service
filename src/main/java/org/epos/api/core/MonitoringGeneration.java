@@ -16,6 +16,7 @@ import model.StatusType;
 import org.epos.api.beans.Distribution;
 import org.epos.api.beans.MonitoringBean;
 import org.epos.api.core.distributions.DistributionDetailsGenerationJPA;
+import org.epos.api.core.distributions.DistributionDetailsGenerationSQL;
 import org.epos.api.routines.DatabaseConnections;
 import org.epos.api.utility.Utils;
 import org.epos.eposdatamodel.*;
@@ -51,7 +52,9 @@ public class MonitoringGeneration {
 			params.put("id", dx.getInstanceId());
 			params.put("useDefaults", "true");
 
-			Distribution distribution = DistributionDetailsGenerationJPA.generate(params);
+			Distribution distribution = EnvironmentVariables.USE_SQL_IMPLEMENTATION 
+					? DistributionDetailsGenerationSQL.generate(params)
+					: DistributionDetailsGenerationJPA.generate(params);
 
 			HashMap<String, Object> parametersMap = new HashMap<>();
 

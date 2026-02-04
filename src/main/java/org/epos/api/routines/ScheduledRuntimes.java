@@ -114,12 +114,15 @@ public class ScheduledRuntimes {
         EposDataModelDAO.getInstance().printCacheReport();
         EposDataModelDAO.getInstance().reloadCache();
         DatabaseConnections.getInstance().syncDatabaseConnections();
-        List<DataProduct> dataproducts = ((List<DataProduct>) AbstractAPI
-                .retrieveAPI(EntityNames.DATAPRODUCT.name())
-                .retrieveAll())
-                .parallelStream()
-                .collect(Collectors.toList());
-        DistributionSearchGenerationJPA.preFetchLinkedEntities(dataproducts);
+        // Only pre-fetch linked entities if using JPA implementation (for JPA cache warming)
+        if (!EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
+            List<DataProduct> dataproducts = ((List<DataProduct>) AbstractAPI
+                    .retrieveAPI(EntityNames.DATAPRODUCT.name())
+                    .retrieveAll())
+                    .parallelStream()
+                    .collect(Collectors.toList());
+            DistributionSearchGenerationJPA.preFetchLinkedEntities(dataproducts);
+        }
         LOGGER.info("[Scheduled Task - Resources] Resources successfully updated");
 	}
 
