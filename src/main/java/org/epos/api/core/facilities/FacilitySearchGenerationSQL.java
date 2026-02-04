@@ -124,6 +124,30 @@ public class FacilitySearchGenerationSQL {
             // Get status list based on user permissions
             List<String> statuses = getStatusList(parameters, user);
 
+            // Debug: Check if facilities exist at all
+            try {
+                Query debugQuery1 = em.createNativeQuery(
+                    "SELECT COUNT(*) FROM metadata_catalogue.facility"
+                );
+                LOGGER.info("DEBUG: Total facilities in DB: {}", debugQuery1.getSingleResult());
+                
+                Query debugQuery2 = em.createNativeQuery(
+                    "SELECT COUNT(*) FROM metadata_catalogue.facility f " +
+                    "JOIN metadata_catalogue.versioningstatus v ON f.version_id = v.version_id"
+                );
+                LOGGER.info("DEBUG: Facilities with version: {}", debugQuery2.getSingleResult());
+                
+                Query debugQuery3 = em.createNativeQuery(
+                    "SELECT DISTINCT v.status FROM metadata_catalogue.facility f " +
+                    "JOIN metadata_catalogue.versioningstatus v ON f.version_id = v.version_id"
+                );
+                @SuppressWarnings("unchecked")
+                List<Object> statusValues = debugQuery3.getResultList();
+                LOGGER.info("DEBUG: Distinct status values in facility: {}", statusValues);
+            } catch (Exception e) {
+                LOGGER.error("DEBUG query failed: {}", e.getMessage());
+            }
+            
             // Build and execute query
             QueryContext ctx = buildFacilitySearchSQL(parameters, user, statuses);
             
