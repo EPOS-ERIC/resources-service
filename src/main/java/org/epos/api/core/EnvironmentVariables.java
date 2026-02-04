@@ -21,6 +21,13 @@ public class EnvironmentVariables {
 	public static final String MONITORING = System.getenv("MONITORING");
 	public static final String MONITORING_URL = System.getenv("MONITORING_URL");
     public static final String MONITORING_API_TOKEN = System.getenv("MONITORING_PWD");
+    
+    /**
+     * Feature flag to switch between JPA and SQL implementations.
+     * Defaults to "true" (SQL implementations). Set to "false" to use JPA.
+     */
+    public static final boolean USE_SQL_IMPLEMENTATION = 
+            !"false".equalsIgnoreCase(System.getenv("USE_SQL_IMPLEMENTATION"));
 
     ///api/frontend/v1
 	

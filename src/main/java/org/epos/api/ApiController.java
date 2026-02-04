@@ -18,13 +18,19 @@ package org.epos.api;
 
 import java.util.Map;
 
+import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.core.MonitoringGeneration;
 import org.epos.api.core.distributions.DistributionDetailsExtendedGenerationJPA;
+import org.epos.api.core.distributions.DistributionDetailsExtendedGenerationSQL;
 import org.epos.api.core.distributions.DistributionDetailsGenerationJPA;
+import org.epos.api.core.distributions.DistributionDetailsGenerationSQL;
 import org.epos.api.core.distributions.DistributionSearchGenerationSQL;
 import org.epos.api.core.facilities.EquipmentsDetailsItemGenerationJPA;
+import org.epos.api.core.facilities.EquipmentsDetailsItemGenerationSQL;
 import org.epos.api.core.facilities.FacilityDetailsItemGenerationJPA;
+import org.epos.api.core.facilities.FacilityDetailsItemGenerationSQL;
 import org.epos.api.core.facilities.FacilitySearchGenerationJPA;
+import org.epos.api.core.facilities.FacilitySearchGenerationSQL;
 import org.epos.api.core.organizations.OrganisationsGeneration;
 import org.epos.api.utility.Utils;
 import org.epos.eposdatamodel.User;
@@ -58,19 +64,40 @@ abstract class ApiController<T> {
 			response = Utils.gson.toJson(DistributionSearchGenerationSQL.generate(requestParams, user));
 			break;
 		case "DETAILS":
-			if(Boolean.valueOf(requestParams.get("extended").toString()))
-				response = Utils.gson.toJson(DistributionDetailsExtendedGenerationJPA.generate(requestParams));
-			else
-				response = Utils.gson.toJson(DistributionDetailsGenerationJPA.generate(requestParams));
+			if(Boolean.valueOf(requestParams.get("extended").toString())) {
+				if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
+					response = Utils.gson.toJson(DistributionDetailsExtendedGenerationSQL.generate(requestParams));
+				} else {
+					response = Utils.gson.toJson(DistributionDetailsExtendedGenerationJPA.generate(requestParams));
+				}
+			} else {
+				if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
+					response = Utils.gson.toJson(DistributionDetailsGenerationSQL.generate(requestParams));
+				} else {
+					response = Utils.gson.toJson(DistributionDetailsGenerationJPA.generate(requestParams));
+				}
+			}
 			break;
 		case "FACILITYSEARCH":
-			response = Utils.gson.toJson(FacilitySearchGenerationJPA.generate(requestParams, user));
+			if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
+				response = Utils.gson.toJson(FacilitySearchGenerationSQL.generate(requestParams, user));
+			} else {
+				response = Utils.gson.toJson(FacilitySearchGenerationJPA.generate(requestParams, user));
+			}
 			break;
 		case "FACILITYDETAILS":
-			response = Utils.gson.toJson(FacilityDetailsItemGenerationJPA.generate(requestParams));
+			if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
+				response = Utils.gson.toJson(FacilityDetailsItemGenerationSQL.generate(requestParams));
+			} else {
+				response = Utils.gson.toJson(FacilityDetailsItemGenerationJPA.generate(requestParams));
+			}
 			break;
 		case "EQUIPMENTDETAILS":
-			response = Utils.gson.toJson(EquipmentsDetailsItemGenerationJPA.generate(requestParams));
+			if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
+				response = Utils.gson.toJson(EquipmentsDetailsItemGenerationSQL.generate(requestParams));
+			} else {
+				response = Utils.gson.toJson(EquipmentsDetailsItemGenerationJPA.generate(requestParams));
+			}
 			break;
 		case "MONITORING":
 			response = Utils.gson.toJson(MonitoringGeneration.generate());
