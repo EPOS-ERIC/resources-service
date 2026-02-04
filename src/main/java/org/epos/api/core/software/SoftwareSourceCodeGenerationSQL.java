@@ -81,7 +81,7 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("  FROM metadata_catalogue.softwaresourcecode ss ");
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON ss.version_id = v.version_id ");
         sql.append("  WHERE ss.instance_id = ?1 ");
-        sql.append("    AND (v.version_status = 'PUBLISHED' OR v.version_status = 'ARCHIVED') ");
+        sql.append("    AND (v.status = 'PUBLISHED' OR v.status = 'ARCHIVED') ");
         sql.append("), ");
 
         // CTE for identifiers (DOI and DDSS-ID)

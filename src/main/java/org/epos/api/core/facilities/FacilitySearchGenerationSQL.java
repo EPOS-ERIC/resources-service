@@ -124,35 +124,11 @@ public class FacilitySearchGenerationSQL {
             // Get status list based on user permissions
             List<String> statuses = getStatusList(parameters, user);
 
-            // Debug: Check if facilities exist at all
-            try {
-                Query debugQuery1 = em.createNativeQuery(
-                    "SELECT COUNT(*) FROM metadata_catalogue.facility"
-                );
-                LOGGER.info("DEBUG: Total facilities in DB: {}", debugQuery1.getSingleResult());
-                
-                Query debugQuery2 = em.createNativeQuery(
-                    "SELECT COUNT(*) FROM metadata_catalogue.facility f " +
-                    "JOIN metadata_catalogue.versioningstatus v ON f.version_id = v.version_id"
-                );
-                LOGGER.info("DEBUG: Facilities with version: {}", debugQuery2.getSingleResult());
-                
-                Query debugQuery3 = em.createNativeQuery(
-                    "SELECT DISTINCT v.status FROM metadata_catalogue.facility f " +
-                    "JOIN metadata_catalogue.versioningstatus v ON f.version_id = v.version_id"
-                );
-                @SuppressWarnings("unchecked")
-                List<Object> statusValues = debugQuery3.getResultList();
-                LOGGER.info("DEBUG: Distinct status values in facility: {}", statusValues);
-            } catch (Exception e) {
-                LOGGER.error("DEBUG query failed: {}", e.getMessage());
-            }
-            
             // Build and execute query
             QueryContext ctx = buildFacilitySearchSQL(parameters, user, statuses);
             
-            LOGGER.info("Generated SQL: {}", ctx.sql.toString());
-            LOGGER.info("SQL Parameters: {}", ctx.params);
+            LOGGER.debug("Generated SQL: {}", ctx.sql.toString());
+            LOGGER.debug("SQL Parameters: {}", ctx.params);
             
             Query query = em.createNativeQuery(ctx.sql.toString());
 
@@ -163,7 +139,7 @@ public class FacilitySearchGenerationSQL {
             @SuppressWarnings("unchecked")
             List<Object[]> results = query.getResultList();
 
-            LOGGER.info("SQL query returned {} rows", results.size());
+            LOGGER.debug("SQL query returned {} rows", results.size());
 
             // Prepare spatial filtering if needed
             Geometry inputGeometry = null;
@@ -392,7 +368,8 @@ public class FacilitySearchGenerationSQL {
     }
 
     /**
-     * Fetches distributions that have facility-related categories
+     * Fetches distributions that have facility-related categories.
+     * A category is of FACILITY type when its scheme has a topConcept with UID 'category:facets/facility-theme'.
      */
     private static Set<DiscoveryItem> fetchFacilityDistributions(EntityManager em, Map<String, Object> parameters,
                                                                   User user, List<String> statuses,
@@ -409,9 +386,13 @@ public class FacilitySearchGenerationSQL {
         sql.append("JOIN metadata_catalogue.versioningstatus v ON d.version_id = v.version_id ");
         sql.append("JOIN metadata_catalogue.distribution_dataproduct ddp ON d.instance_id = ddp.distribution_instance_id ");
         sql.append("JOIN metadata_catalogue.dataproduct dp ON ddp.dataproduct_instance_id = dp.instance_id ");
+        sql.append("JOIN metadata_catalogue.versioningstatus vdp ON dp.version_id = vdp.version_id ");
         sql.append("JOIN metadata_catalogue.dataproduct_category dpc ON dp.instance_id = dpc.dataproduct_instance_id ");
         sql.append("JOIN metadata_catalogue.category c ON dpc.category_instance_id = c.instance_id ");
         sql.append("JOIN metadata_catalogue.category_scheme cs ON c.in_scheme = cs.instance_id ");
+        // Join to find schemes that have facility-theme as a top concept
+        sql.append("JOIN metadata_catalogue.category_hastopconcept chtc ON cs.instance_id = chtc.category_scheme_instance_id ");
+        sql.append("JOIN metadata_catalogue.category tc ON chtc.category_instance_id = tc.instance_id ");
         sql.append("LEFT JOIN metadata_catalogue.distribution_title dt ON d.instance_id = dt.distribution_instance_id ");
         sql.append("LEFT JOIN metadata_catalogue.distribution_description dd ON d.instance_id = dd.distribution_instance_id ");
         sql.append("WHERE v.status IN (");
@@ -420,18 +401,54 @@ public class FacilitySearchGenerationSQL {
             sql.append("'").append(statuses.get(i)).append("'");
         }
         sql.append(") ");
-        sql.append("  AND cs.code = 'facilitytype' ");
+        // Filter for facility-theme top concept
+        sql.append("  AND tc.uid = 'category:facets/facility-theme' ");
+        // Also check dataproduct status
+        sql.append("  AND vdp.status IN (");
+        for (int i = 0; i < statuses.size(); i++) {
+            if (i > 0) sql.append(", ");
+            sql.append("'").append(statuses.get(i)).append("'");
+        }
+        sql.append(") ");
 
         if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
             sql.append(" AND (v.status != 'DRAFT' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+            sql.append(" AND (vdp.status != 'DRAFT' OR vdp.editor_id = '").append(user.getAuthIdentifier()).append("') ");
         }
 
         sql.append("GROUP BY d.instance_id, d.meta_id, d.uid, c.uid, v.status, v.editor_id ");
+
+        LOGGER.debug("Facility distributions SQL: {}", sql.toString());
 
         Query query = em.createNativeQuery(sql.toString());
 
         @SuppressWarnings("unchecked")
         List<Object[]> results = query.getResultList();
+
+        LOGGER.debug("Facility distributions query returned {} rows", results.size());
+
+        // Collect distribution IDs for batch loading formats
+        List<String> distributionIds = new ArrayList<>();
+        for (Object[] row : results) {
+            distributionIds.add((String) row[0]);
+        }
+
+        // Batch load distributions for format generation
+        Map<String, org.epos.eposdatamodel.Distribution> distributionMap = new HashMap<>();
+        if (!distributionIds.isEmpty()) {
+            @SuppressWarnings("unchecked")
+            List<org.epos.eposdatamodel.Distribution> distributions = 
+                (List<org.epos.eposdatamodel.Distribution>) abstractapis.AbstractAPI
+                    .retrieveAPI(metadataapis.EntityNames.DISTRIBUTION.name())
+                    .retrieveBunch(distributionIds);
+            if (distributions != null) {
+                for (org.epos.eposdatamodel.Distribution dist : distributions) {
+                    if (dist != null) {
+                        distributionMap.put(dist.getInstanceId(), dist);
+                    }
+                }
+            }
+        }
 
         for (Object[] row : results) {
             String instanceId = (String) row[0];
@@ -443,6 +460,13 @@ public class FacilitySearchGenerationSQL {
             String versioningStatus = (String) row[6];
             String editorId = (String) row[7];
 
+            // Generate available formats using the distribution object
+            List<AvailableFormat> availableFormats = new ArrayList<>();
+            org.epos.eposdatamodel.Distribution distribution = distributionMap.get(instanceId);
+            if (distribution != null) {
+                availableFormats = AvailableFormatsGeneration.generate(distribution);
+            }
+
             DiscoveryItem item = new DiscoveryItemBuilder(
                     instanceId,
                     EnvironmentVariables.API_HOST + API_PATH_DETAILS + instanceId,
@@ -451,7 +475,7 @@ public class FacilitySearchGenerationSQL {
                     .metaId(metaId)
                     .title(title)
                     .description(description)
-                    .availableFormats(new ArrayList<>())
+                    .availableFormats(availableFormats)
                     .categories(Arrays.asList(categoryUid))
                     .versioningStatus(user != null && parameters.containsKey("versioningStatus") ? versioningStatus : null)
                     .editorId(user != null && parameters.containsKey("versioningStatus") ? editorId : null)
