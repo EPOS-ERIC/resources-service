@@ -78,8 +78,8 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("         ss.runtimeplatform, ss.softwareversion, ss.softwarestatus, ");
         sql.append("         ss.spatial, ss.temporal, ss.filesize, ss.timerequired, ");
         sql.append("         ss.keywords ");
-        sql.append("  FROM softwaresourcecode ss ");
-        sql.append("  JOIN versioningstatus v ON ss.version_id = v.version_id ");
+        sql.append("  FROM metadata_catalogue.softwaresourcecode ss ");
+        sql.append("  JOIN metadata_catalogue.versioningstatus v ON ss.version_id = v.version_id ");
         sql.append("  WHERE ss.instance_id = ?1 ");
         sql.append("    AND (v.version_status = 'PUBLISHED' OR v.version_status = 'ARCHIVED') ");
         sql.append("), ");
@@ -91,8 +91,8 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("           'type', i.type, ");
         sql.append("           'identifier', i.identifier ");
         sql.append("         )) AS identifiers ");
-        sql.append("  FROM softwaresourcecode_identifier si ");
-        sql.append("  JOIN identifier i ON si.identifier_instance_id = i.instance_id ");
+        sql.append("  FROM metadata_catalogue.softwaresourcecode_identifier si ");
+        sql.append("  JOIN metadata_catalogue.identifier i ON si.identifier_instance_id = i.instance_id ");
         sql.append("  WHERE si.softwaresourcecode_instance_id = ?1 ");
         sql.append("  GROUP BY si.softwaresourcecode_instance_id ");
         sql.append("), ");
@@ -101,7 +101,7 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("software_contacts AS ( ");
         sql.append("  SELECT sc.softwaresourcecode_instance_id AS instance_id, ");
         sql.append("         COUNT(*) AS contact_count ");
-        sql.append("  FROM softwaresourcecode_contactpoint sc ");
+        sql.append("  FROM metadata_catalogue.softwaresourcecode_contactpoint sc ");
         sql.append("  WHERE sc.softwaresourcecode_instance_id = ?1 ");
         sql.append("  GROUP BY sc.softwaresourcecode_instance_id ");
         sql.append("), ");
@@ -110,8 +110,8 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("software_categories AS ( ");
         sql.append("  SELECT scat.softwaresourcecode_instance_id AS instance_id, ");
         sql.append("         JSONB_AGG(c.uid) AS categories ");
-        sql.append("  FROM softwaresourcecode_category scat ");
-        sql.append("  JOIN category c ON scat.category_instance_id = c.instance_id ");
+        sql.append("  FROM metadata_catalogue.softwaresourcecode_category scat ");
+        sql.append("  JOIN metadata_catalogue.category c ON scat.category_instance_id = c.instance_id ");
         sql.append("  WHERE scat.softwaresourcecode_instance_id = ?1 ");
         sql.append("  GROUP BY scat.softwaresourcecode_instance_id ");
         sql.append("), ");
@@ -120,8 +120,8 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("software_languages AS ( ");
         sql.append("  SELECT se.softwaresourcecode_instance_id AS instance_id, ");
         sql.append("         JSONB_AGG(e.value) AS programming_languages ");
-        sql.append("  FROM softwaresourcecode_element se ");
-        sql.append("  JOIN element e ON se.element_instance_id = e.instance_id ");
+        sql.append("  FROM metadata_catalogue.softwaresourcecode_element se ");
+        sql.append("  JOIN metadata_catalogue.element e ON se.element_instance_id = e.instance_id ");
         sql.append("  WHERE se.softwaresourcecode_instance_id = ?1 ");
         sql.append("  GROUP BY se.softwaresourcecode_instance_id ");
         sql.append(") ");

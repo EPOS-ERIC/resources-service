@@ -126,6 +126,10 @@ public class FacilitySearchGenerationSQL {
 
             // Build and execute query
             QueryContext ctx = buildFacilitySearchSQL(parameters, user, statuses);
+            
+            LOGGER.info("Generated SQL: {}", ctx.sql.toString());
+            LOGGER.info("SQL Parameters: {}", ctx.params);
+            
             Query query = em.createNativeQuery(ctx.sql.toString());
 
             for (Map.Entry<Integer, Object> entry : ctx.params.entrySet()) {
@@ -135,7 +139,7 @@ public class FacilitySearchGenerationSQL {
             @SuppressWarnings("unchecked")
             List<Object[]> results = query.getResultList();
 
-            LOGGER.debug("SQL query returned {} rows", results.size());
+            LOGGER.info("SQL query returned {} rows", results.size());
 
             // Prepare spatial filtering if needed
             Geometry inputGeometry = null;
