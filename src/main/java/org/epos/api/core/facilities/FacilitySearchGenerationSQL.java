@@ -1,5 +1,6 @@
 package org.epos.api.core.facilities;
 
+import java.sql.Timestamp;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -233,7 +234,7 @@ public class FacilitySearchGenerationSQL {
         String statusParams = nextListParam(ctx, statuses);
         ctx.sql.append("published_facilities AS ( ");
         ctx.sql.append("  SELECT f.instance_id, f.meta_id, f.uid, f.title, f.description, f.type, f.keywords, ");
-        ctx.sql.append("         v.status AS versioning_status, v.editor_id ");
+        ctx.sql.append("         v.status AS versioning_status, v.change_timestamp, v.editor_id ");
         ctx.sql.append("  FROM metadata_catalogue.facility f ");
         ctx.sql.append("  JOIN metadata_catalogue.versioningstatus v ON f.version_id = v.version_id ");
         ctx.sql.append("  WHERE v.status IN ").append(statusParams);
@@ -351,7 +352,7 @@ public class FacilitySearchGenerationSQL {
         // Main SELECT
         ctx.sql.append("SELECT ");
         ctx.sql.append("  pf.instance_id, pf.meta_id, pf.uid, pf.title, pf.description, pf.type, pf.keywords, ");
-        ctx.sql.append("  pf.versioning_status, pf.editor_id, ");
+        ctx.sql.append("  pf.versioning_status, pf.change_timestamp, pf.editor_id, ");
         ctx.sql.append("  COALESCE(CAST(fca.categories AS text), '[]') AS categories, ");
         ctx.sql.append("  COALESCE(fsa.locations, '') AS spatial_locations, ");
         ctx.sql.append("  COALESCE(CAST(foa.owners AS text), '[]') AS owners, ");
@@ -398,7 +399,7 @@ public class FacilitySearchGenerationSQL {
         // CTE 1: Base facility distributions
         sql.append("WITH facility_distributions AS ( ");
         sql.append("  SELECT DISTINCT d.instance_id, d.meta_id, d.uid, d.format AS original_format, ");
-        sql.append("         v.status AS versioning_status, v.editor_id, c.uid AS category_uid ");
+        sql.append("         v.status AS versioning_status, v.change_timestamp, v.editor_id, c.uid AS category_uid ");
         sql.append("  FROM metadata_catalogue.distribution d ");
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON d.version_id = v.version_id ");
         sql.append("  JOIN metadata_catalogue.distribution_dataproduct ddp ON d.instance_id = ddp.distribution_instance_id ");
@@ -502,7 +503,7 @@ public class FacilitySearchGenerationSQL {
         // Main SELECT
         sql.append("SELECT ");
         sql.append("  fd.instance_id, fd.meta_id, fd.uid, fd.original_format, ");
-        sql.append("  fd.versioning_status, fd.editor_id, fd.category_uid, ");
+        sql.append("  fd.versioning_status, fd.change_timestamp, fd.editor_id, fd.category_uid, ");
         sql.append("  COALESCE(dt.title, '') AS title, ");
         sql.append("  COALESCE(dd.description, '') AS description, ");
         sql.append("  COALESCE(CAST(TO_JSON(ddu.download_urls) AS text), '[]') AS download_urls, ");
@@ -533,6 +534,7 @@ public class FacilitySearchGenerationSQL {
             String uid = (String) row[i++];
             String originalFormat = (String) row[i++];
             String versioningStatus = (String) row[i++];
+            Timestamp changeTimestamp = (Timestamp) row[i++];
             String editorId = (String) row[i++];
             String categoryUid = (String) row[i++];
             String title = (String) row[i++];
@@ -548,7 +550,7 @@ public class FacilitySearchGenerationSQL {
             List<AvailableFormat> availableFormats = buildDistributionAvailableFormats(
                     instanceId, downloadUrls, originalFormat, operationReturns, availableFormatsJson, serviceValues);
 
-            DiscoveryItem item = new DiscoveryItemBuilder(
+            DiscoveryItemBuilder item = new DiscoveryItemBuilder(
                     instanceId,
                     EnvironmentVariables.API_HOST + API_PATH_DETAILS + instanceId,
                     EnvironmentVariables.API_HOST + API_PATH_DETAILS + instanceId + "?extended=true")
@@ -557,12 +559,26 @@ public class FacilitySearchGenerationSQL {
                     .title(title)
                     .description(description)
                     .availableFormats(availableFormats)
-                    .categories(Arrays.asList(categoryUid))
-                    .versioningStatus(user != null && parameters.containsKey("versioningStatus") ? versioningStatus : null)
-                    .editorId(user != null && parameters.containsKey("versioningStatus") ? editorId : null)
-                    .build();
+                    .categories(Arrays.asList(categoryUid));
 
-            items.add(item);
+            // Add versioning metadata for backoffice users
+            if (user != null && parameters.containsKey("versioningStatus")) {
+                item.versioningStatus(versioningStatus)
+                    .editorId(editorId);
+                if (changeTimestamp != null) {
+                    item.changeDate(changeTimestamp.toLocalDateTime());
+                }
+                if ("ingestor".equals(editorId)) {
+                    item.editorFullName("Ingestor");
+                } else {
+                    User editor = DatabaseConnections.retrieveUserMap().get(editorId);
+                    if (editor != null) {
+                        item.editorFullName(editor.getFirstName() + " " + editor.getLastName());
+                    }
+                }
+            }
+
+            items.add(item.build());
         }
 
         return items;
@@ -821,6 +837,7 @@ public class FacilitySearchGenerationSQL {
         String type = (String) row[i++];
         String keywords = (String) row[i++];
         String versioningStatus = (String) row[i++];
+        Timestamp changeTimestamp = (Timestamp) row[i++];
         String editorId = (String) row[i++];
         String categoriesJson = (String) row[i++];
         String spatialLocations = (String) row[i++];
@@ -902,7 +919,7 @@ public class FacilitySearchGenerationSQL {
                 .type(AvailableFormatType.CONVERTED)
                 .build());
 
-        return new DiscoveryItemBuilder(instanceId,
+        DiscoveryItemBuilder builder = new DiscoveryItemBuilder(instanceId,
                 EnvironmentVariables.API_HOST + API_PATH_DETAILS + instanceId,
                 null)
                 .uid(uid)
@@ -911,10 +928,17 @@ public class FacilitySearchGenerationSQL {
                 .sha256id(DigestUtils.sha256Hex(uid))
                 .availableFormats(formats)
                 .facilityProvider(facilityProviders)
-                .categories(categoryList.isEmpty() ? null : categoryList)
-                .versioningStatus(user != null && parameters.containsKey("versioningStatus") ? versioningStatus : null)
-                .editorId(user != null && parameters.containsKey("versioningStatus") ? editorId : null)
-                .build();
+                .categories(categoryList.isEmpty() ? null : categoryList);
+
+        if (user != null && parameters.containsKey("versioningStatus")) {
+            builder.versioningStatus(versioningStatus)
+                    .editorId(editorId);
+            if (changeTimestamp != null) {
+                builder.changeDate(changeTimestamp.toLocalDateTime());
+            }
+        }
+
+        return builder.build();
     }
 
     private static boolean checkSpatialIntersection(String spatialLocationsStr, Geometry inputGeometry, WKTReader wktReader) {

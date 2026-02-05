@@ -24,6 +24,7 @@ import org.epos.api.beans.TemporalCoverage;
 import org.epos.api.beans.Webservice;
 import org.epos.api.core.AvailableFormatsGeneration;
 import org.epos.api.core.DataServiceProviderGeneration;
+import org.epos.api.core.DataServiceProviderGenerationSQL;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.enums.ProviderType;
 import org.epos.api.facets.Facets;
@@ -614,7 +615,7 @@ public class DistributionDetailsExtendedGenerationSQL {
         // Data providers
         List<Organization> publishers = parsePublishers(publishersJson);
         if (!publishers.isEmpty()) {
-            dataproduct.setDataProvider(DataServiceProviderGeneration.getProviders(publishers));
+            dataproduct.setDataProvider(DataServiceProviderGenerationSQL.getProviders(publishers));
         }
 
         // Contact points
@@ -698,7 +699,7 @@ public class DistributionDetailsExtendedGenerationSQL {
                 org.setURL(getTextOrNull(node, "url"));
                 org.setLogo(getTextOrNull(node, "logo"));
 
-                List<DataServiceProvider> providers = DataServiceProviderGeneration.getProviders(List.of(org));
+                List<DataServiceProvider> providers = DataServiceProviderGenerationSQL.getProviders(List.of(org));
                 if (!providers.isEmpty()) {
                     webservice.setProvider(providers.get(0));
                 }

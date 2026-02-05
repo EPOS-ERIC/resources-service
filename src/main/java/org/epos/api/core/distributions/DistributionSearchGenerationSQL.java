@@ -14,12 +14,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 
+import model.StatusType;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.epos.api.facets.Facets;
 import org.epos.eposdatamodel.User;
 import org.epos.api.beans.*;
 import org.epos.api.beans.DiscoveryItem.DiscoveryItemBuilder;
 import org.epos.api.core.DataServiceProviderGeneration;
+import org.epos.api.core.DataServiceProviderGenerationSQL;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.core.ZabbixExecutor;
 import org.epos.api.enums.AvailableFormatType;
@@ -818,6 +820,14 @@ public class DistributionSearchGenerationSQL {
                 builder.editorId(editorId).versioningStatus(versioningStatus);
                 if (changeTimestamp != null) {
                     builder.changeDate(changeTimestamp.toLocalDateTime());
+                    if ("ingestor".equals(editorId)) {
+                        builder.editorFullName("Ingestor");
+                    } else {
+                        User editor = DatabaseConnections.retrieveUserMap().get(editorId);
+                        if (editor != null) {
+                            builder.editorFullName(editor.getFirstName() + " " + editor.getLastName());
+                        }
+                    }
                 }
             }
 
@@ -837,6 +847,17 @@ public class DistributionSearchGenerationSQL {
             LOGGER.warn("Failed to map result row: {}", e.getMessage());
             return null;
         }
+    }
+
+    private static List<StatusType> getVersions(Map<String, Object> parameters, boolean isBackofficeUser) {
+        List<StatusType> versions = new ArrayList<>();
+        if (isBackofficeUser && parameters.containsKey("versioningStatus")) {
+            Arrays.stream(parameters.get("versioningStatus").toString().split(","))
+                    .forEach(version -> versions.add(StatusType.valueOf(version)));
+        } else {
+            versions.add(StatusType.PUBLISHED);
+        }
+        return versions;
     }
 
     /**
@@ -1281,7 +1302,7 @@ public class DistributionSearchGenerationSQL {
         // Organizations filter
         List<Organization> orgEntities = convertToOrganizationEntities(filterData.organizations);
         NodeFilters organisationsNodes = new NodeFilters("organisations");
-        DataServiceProviderGeneration.getProviders(orgEntities).forEach(resource -> {
+        DataServiceProviderGenerationSQL.getProviders(orgEntities).forEach(resource -> {
             NodeFilters node = new NodeFilters(resource.getDataProviderLegalName());
             node.setId(resource.getInstanceid());
             organisationsNodes.addChild(node);

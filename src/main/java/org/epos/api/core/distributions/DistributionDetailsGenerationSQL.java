@@ -21,6 +21,7 @@ import org.epos.api.beans.SpatialInformation;
 import org.epos.api.beans.TemporalCoverage;
 import org.epos.api.core.AvailableFormatsGeneration;
 import org.epos.api.core.DataServiceProviderGeneration;
+import org.epos.api.core.DataServiceProviderGenerationSQL;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.enums.ProviderType;
 import org.epos.api.facets.Facets;
@@ -450,7 +451,7 @@ public class DistributionDetailsGenerationSQL {
         // Data providers
         List<Organization> publishers = parsePublishers(dpPublishersJson);
         if (!publishers.isEmpty()) {
-            distribution.setDataProvider(DataServiceProviderGeneration.getProviders(publishers));
+            distribution.setDataProvider(DataServiceProviderGenerationSQL.getProviders(publishers));
         }
 
         // Science domains
@@ -650,7 +651,7 @@ public class DistributionDetailsGenerationSQL {
             org.setURL(getTextOrNull(node, "url"));
             org.setLogo(getTextOrNull(node, "logo"));
 
-            List<DataServiceProvider> providers = DataServiceProviderGeneration.getProviders(List.of(org));
+            List<DataServiceProvider> providers = DataServiceProviderGenerationSQL.getProviders(List.of(org));
             if (!providers.isEmpty()) {
                 distribution.setServiceProvider(providers.get(0));
             }

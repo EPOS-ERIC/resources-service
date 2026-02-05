@@ -17,6 +17,7 @@ import org.epos.api.beans.Facility;
 import org.epos.api.beans.ServiceParameter;
 import org.epos.api.beans.SpatialInformation;
 import org.epos.api.core.DataServiceProviderGeneration;
+import org.epos.api.core.DataServiceProviderGenerationSQL;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.core.distributions.DistributionDetailsGenerationSQL;
 import org.epos.api.enums.AvailableFormatType;
@@ -269,7 +270,7 @@ public class FacilityDetailsItemGenerationSQL {
         // Data providers (owners)
         if (!isEmptyJson(ownersJson)) {
             List<Organization> organizations = parseOrganizations(ownersJson);
-            facility.setDataProvider(DataServiceProviderGeneration.getProviders(organizations));
+            facility.setDataProvider(DataServiceProviderGenerationSQL.getProviders(organizations));
         }
 
         // Page URLs

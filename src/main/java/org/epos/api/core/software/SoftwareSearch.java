@@ -20,6 +20,7 @@ import org.epos.api.beans.NodeFilters;
 import org.epos.api.beans.SearchResponse;
 import org.epos.api.core.AvailableFormatsGeneration;
 import org.epos.api.core.EnvironmentVariables;
+import org.epos.api.core.software.SoftwareSearchGenerationSQL;
 import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
@@ -45,6 +46,11 @@ public class SoftwareSearch {
 	private static final Pattern FORMAT_PATTERN = Pattern.compile("\\.([a-zA-Z0-9]+)(?:/|$|\\?)");
 
 	public static SearchResponse generate(String query, User user, String versioningStatus) {
+		// Use SQL implementation if enabled
+		if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
+			return SoftwareSearchGenerationSQL.generate(query, user, versioningStatus);
+		}
+
 		LOGGER.info("Generating discovery items with query {}, status {}, user {}", query, versioningStatus,
 				user != null ? user.getAuthIdentifier() : "public");
 		long startTime = System.currentTimeMillis();

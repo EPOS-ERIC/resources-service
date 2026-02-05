@@ -89,7 +89,7 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("  SELECT si.softwaresourcecode_instance_id AS instance_id, ");
         sql.append("         JSONB_AGG(JSONB_BUILD_OBJECT( ");
         sql.append("           'type', i.type, ");
-        sql.append("           'identifier', i.identifier ");
+        sql.append("           'identifier', i.value ");
         sql.append("         )) AS identifiers ");
         sql.append("  FROM metadata_catalogue.softwaresourcecode_identifier si ");
         sql.append("  JOIN metadata_catalogue.identifier i ON si.identifier_instance_id = i.instance_id ");
