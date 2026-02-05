@@ -142,6 +142,13 @@ public class AvailableFormatsBuilder {
             return formats;
         }
 
+        // If no operation template, return empty formats (matches JPA behavior)
+        // Plugins are only available for webservice distributions with operations
+        if (input.operationTemplate == null || input.operationTemplate.isEmpty()) {
+            LOGGER.debug("No operation template for instance {}, returning empty formats", input.instanceId);
+            return formats;
+        }
+
         // Add plugin-based converted formats
         addPluginFormats(input.instanceId, formats);
 
@@ -212,15 +219,29 @@ public class AvailableFormatsBuilder {
     public static void addPluginFormats(String instanceId, List<AvailableFormat> formats) {
         try {
             Map<String, List<Plugin.Relations>> plugins = DatabaseConnections.getInstance().getPlugins();
+            if (plugins == null) {
+                LOGGER.debug("Plugins map is null for instance {}", instanceId);
+                return;
+            }
+            
             List<Plugin.Relations> relations = plugins.get(instanceId);
-            if (relations == null) {
+            if (relations == null || relations.isEmpty()) {
+                LOGGER.debug("No plugin relations found for instance {}", instanceId);
                 return;
             }
 
+            LOGGER.debug("Found {} plugin relations for instance {}", relations.size(), instanceId);
+            
             for (Plugin.Relations relation : relations) {
                 String outputFormat = relation.getOutputFormat();
                 String inputFormat = relation.getInputFormat();
                 String pluginId = relation.getPluginId();
+
+                if (outputFormat == null || inputFormat == null || pluginId == null) {
+                    LOGGER.debug("Skipping plugin relation with null values: output={}, input={}, pluginId={}", 
+                            outputFormat, inputFormat, pluginId);
+                    continue;
+                }
 
                 String label;
                 if (outputFormat.equals("application/epos.geo+json")
@@ -234,14 +255,17 @@ public class AvailableFormatsBuilder {
                         || outputFormat.contains("covjson")) {
                     label = "COVJSON";
                 } else {
+                    LOGGER.debug("Skipping plugin with unsupported output format: {}", outputFormat);
                     continue;
                 }
 
+                LOGGER.debug("Adding converted format: pluginId={}, inputFormat={}, outputFormat={}, label={}", 
+                        pluginId, inputFormat, outputFormat, label);
                 formats.add(createConvertedFormat(inputFormat, pluginId, inputFormat, outputFormat,
                         buildHrefConverted(instanceId, outputFormat, inputFormat, pluginId), label));
             }
         } catch (Exception e) {
-            LOGGER.warn("Failed to process plugins for instance {}: {}", instanceId, e.getMessage());
+            LOGGER.warn("Failed to process plugins for instance {}: {}", instanceId, e.getMessage(), e);
         }
     }
 
