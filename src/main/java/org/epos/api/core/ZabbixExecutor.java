@@ -25,7 +25,7 @@ public class ZabbixExecutor {
     private JsonObject hostResults;
     private static final Logger LOGGER = LoggerFactory.getLogger(ZabbixExecutor.class);
 
-    // API Token caricato da variabile d'ambiente
+    // API Token loaded from environment variable
     private final String apiToken;
 
     public static ZabbixExecutor getInstance() {
@@ -36,45 +36,45 @@ public class ZabbixExecutor {
     }
 
     private ZabbixExecutor() {
-        // Valida URL
+        // Validate URL
         if (EnvironmentVariables.MONITORING_URL == null || EnvironmentVariables.MONITORING_URL.isEmpty()) {
-            LOGGER.error("ZABBIX_URL non configurato!");
-            LOGGER.error("Imposta la variabile d'ambiente: export ZABBIX_URL=\"http://your-server/zabbix/api_jsonrpc.php\"");
-            throw new IllegalStateException("URL di Zabbix non configurato. Imposta ZABBIX_URL");
+            LOGGER.error("ZABBIX_URL not configured!");
+            LOGGER.error("Set the environment variable: export ZABBIX_URL=\"http://your-server/zabbix/api_jsonrpc.php\"");
+            throw new IllegalStateException("Zabbix URL not configured. Set ZABBIX_URL");
         }
 
-        // Valida API Token
+        // Validate API Token
         this.apiToken = EnvironmentVariables.MONITORING_API_TOKEN;
         if (apiToken == null || apiToken.isEmpty()) {
-            LOGGER.error("ZABBIX_API_TOKEN non configurato!");
-            LOGGER.error("Imposta la variabile d'ambiente: export ZABBIX_API_TOKEN=\"your-api-token\"");
-            throw new IllegalStateException("API Token di Zabbix non configurato. Imposta ZABBIX_API_TOKEN");
+            LOGGER.error("ZABBIX_API_TOKEN not configured!");
+            LOGGER.error("Set the environment variable: export ZABBIX_API_TOKEN=\"your-api-token\"");
+            throw new IllegalStateException("Zabbix API Token not configured. Set ZABBIX_API_TOKEN");
         }
 
-        LOGGER.info("ZabbixExecutor inizializzato con API Token per Zabbix 7.4");
+        LOGGER.info("ZabbixExecutor initialized with API Token for Zabbix 7.4");
         LOGGER.info("Zabbix URL: {}", EnvironmentVariables.MONITORING_URL);
     }
 
     /**
-     * Restituisce l'API Token configurato
-     * Non è più necessario fare login/logout
+     * Returns the configured API Token.
+     * Login/logout is no longer required.
      */
     public String getApiToken() {
         return apiToken;
     }
 
     /**
-     * Metodo base per effettuare richieste HTTP a Zabbix 7.4
-     * Utilizza l'header Authorization: Bearer per l'autenticazione
+     * Base method to perform HTTP requests to Zabbix 7.4.
+     * Uses the Authorization: Bearer header for authentication.
      */
     private String sendRequest(String requestBodyJson) throws IOException, InterruptedException {
         return sendRequest(requestBodyJson, true);
     }
 
     /**
-     * Metodo base per effettuare richieste HTTP a Zabbix 7.4
-     * @param requestBodyJson Il body della richiesta in JSON
-     * @param useAuth Se true, include l'header Authorization Bearer
+     * Base method to perform HTTP requests to Zabbix 7.4.
+     * @param requestBodyJson The request body in JSON format
+     * @param useAuth If true, includes the Authorization Bearer header
      */
     private String sendRequest(String requestBodyJson, boolean useAuth) throws IOException, InterruptedException {
         var values = Utils.gson.fromJson(requestBodyJson, HashMap.class);
@@ -86,7 +86,7 @@ public class ZabbixExecutor {
                 .header("Content-Type", "application/json-rpc")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody));
 
-        // Aggiungi Authorization header solo se richiesto
+        // Add Authorization header only if requested
         if (useAuth) {
             requestBuilder.header("Authorization", "Bearer " + apiToken);
         }
@@ -100,7 +100,7 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera la lista degli host da Zabbix
+     * Retrieves the list of hosts from Zabbix.
      */
     public String retrieveHosts() throws IOException, InterruptedException {
         String retrieveHosts = "{\n"
@@ -123,8 +123,8 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera tutti gli item da Zabbix
-     * Per filtrare per host specifico, usa getItemsForHost(hostid)
+     * Retrieves all items from Zabbix.
+     * To filter by specific host, use getItemsForHost(hostid).
      */
     public String getItems() throws IOException, InterruptedException {
         String retrieveItems = "{\n"
@@ -152,7 +152,7 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera gli item per un host specifico
+     * Retrieves items for a specific host.
      */
     public String getItemsForHost(String hostid) throws IOException, InterruptedException {
         String retrieveItems = "{\n"
@@ -181,7 +181,7 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera gli item web.test.error da Zabbix
+     * Retrieves web.test.error items from Zabbix.
      */
     public String getWebTestErrorItems() throws IOException, InterruptedException {
         String retrieveItems = "{\n"
@@ -212,8 +212,8 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera tutti i problemi da Zabbix
-     * Per filtrare per host specifico, usa getProblemsForHost(hostid)
+     * Retrieves all problems from Zabbix.
+     * To filter by specific host, use getProblemsForHost(hostid).
      */
     public String getProblems() throws IOException, InterruptedException {
         String retrieveItems = "{\n"
@@ -238,7 +238,7 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera i problemi per un host specifico
+     * Retrieves problems for a specific host.
      */
     public String getProblemsForHost(String hostid) throws IOException, InterruptedException {
         String retrieveItems = "{\n"
@@ -264,12 +264,12 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera gli HTTP test per un host specifico
-     * @param hostid L'ID dell'host per cui recuperare gli HTTP test
+     * Retrieves HTTP tests for a specific host.
+     * @param hostid The ID of the host to retrieve HTTP tests for
      */
     public String getHttpItems(String hostid) throws IOException, InterruptedException {
         if (hostid == null || hostid.isEmpty()) {
-            throw new IllegalArgumentException("hostid non può essere null o vuoto");
+            throw new IllegalArgumentException("hostid cannot be null or empty");
         }
 
         String retrieveItems = "{\n"
@@ -295,15 +295,15 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera gli HTTP test (alias per getGraphs)
+     * Retrieves HTTP tests (alias for getGraphs).
      */
     public String getHttpTest() throws IOException, InterruptedException {
         return getGraphs();
     }
 
     /**
-     * Recupera tutti gli HTTP test da Zabbix
-     * Per filtrare per host specifico, usa getHttpItems(hostid)
+     * Retrieves all HTTP tests from Zabbix.
+     * To filter by specific host, use getHttpItems(hostid).
      */
     public String getGraphs() throws IOException, InterruptedException {
         String httpTest = "{\n"
@@ -328,16 +328,16 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Effettua una richiesta e restituisce il campo "result" come stringa
+     * Performs a request and returns the "result" field as a string.
      */
     private String getResultAsString(String requestJson) throws IOException, InterruptedException {
         return getResultAsString(requestJson, true);
     }
 
     /**
-     * Effettua una richiesta e restituisce il campo "result" come stringa
-     * @param requestJson Il JSON della richiesta
-     * @param useAuth Se true, include l'header Authorization Bearer
+     * Performs a request and returns the "result" field as a string.
+     * @param requestJson The request JSON
+     * @param useAuth If true, includes the Authorization Bearer header
      */
     private String getResultAsString(String requestJson, boolean useAuth) throws IOException, InterruptedException {
         var values = Utils.gson.fromJson(requestJson, HashMap.class);
@@ -349,7 +349,7 @@ public class ZabbixExecutor {
                 .header("Content-Type", "application/json-rpc")
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody));
 
-        // Aggiungi Authorization header solo se richiesto
+        // Add Authorization header only if requested
         if (useAuth) {
             requestBuilder.header("Authorization", "Bearer " + apiToken);
         }
@@ -360,19 +360,19 @@ public class ZabbixExecutor {
 
         JsonObject jsonResponse = Utils.gson.fromJson(response.body(), JsonObject.class);
 
-        // Gestisce eventuali errori dall'API
+        // Handle any errors from the API
         if (jsonResponse.has("error")) {
             JsonObject error = jsonResponse.getAsJsonObject("error");
             String errorMessage = error.get("message").getAsString();
             String errorData = error.has("data") ? error.get("data").getAsString() : "";
-            LOGGER.error("Errore Zabbix API: {} - {}", errorMessage, errorData);
+            LOGGER.error("Zabbix API Error: {} - {}", errorMessage, errorData);
             throw new IOException("Zabbix API Error: " + errorMessage + " - " + errorData);
         }
 
         return jsonResponse.get("result").getAsString();
     }
 
-    // Getter e Setter per hostResults
+    // Getter and Setter for hostResults
     public JsonObject getHostResults() {
         return hostResults;
     }
@@ -382,7 +382,7 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera lo status da un ID SHA
+     * Retrieves status from a SHA ID.
      */
     public Integer getStatusInfoFromSha(String idSha) {
         if(hostResults == null) return 0;
@@ -393,7 +393,7 @@ public class ZabbixExecutor {
     }
 
     /**
-     * Recupera il timestamp dello status da un ID SHA
+     * Retrieves the status timestamp from a SHA ID.
      */
     public String getStatusTimestampInfoFromSha(String idSha) {
         if(hostResults == null) return null;
@@ -404,15 +404,16 @@ public class ZabbixExecutor {
     }
 
     /**
-     *  TODO:
+     * Returns the monitoring URL for a given SHA ID.
+     * TODO: Make the base URL configurable
      */
     public String getStatusURLFromSha(String idSha) {
         return "https://epos-services.vm.fedcloud.eu/monitoring/?sha=" + idSha;
     }
 
     /**
-     * Verifica la connessione con Zabbix controllando la versione API
-     * Nota: apiinfo.version NON richiede autenticazione in Zabbix 7.4
+     * Verifies the connection with Zabbix by checking the API version.
+     * Note: apiinfo.version does NOT require authentication in Zabbix 7.4.
      */
     public String getApiVersion() throws IOException, InterruptedException {
         String versionRequest = "{\n"
@@ -422,7 +423,7 @@ public class ZabbixExecutor {
                 + "    \"id\": 1\n"
                 + "}";
 
-        // apiinfo.version deve essere chiamato SENZA header Authorization
+        // apiinfo.version must be called WITHOUT the Authorization header
         String response = sendRequest(versionRequest, false);
         JsonObject jsonResponse = Utils.gson.fromJson(response, JsonObject.class);
 
@@ -433,7 +434,7 @@ public class ZabbixExecutor {
         if (jsonResponse.has("error")) {
             JsonObject error = jsonResponse.getAsJsonObject("error");
             String errorMessage = error.get("message").getAsString();
-            LOGGER.error("Errore recupero versione API: {}", errorMessage);
+            LOGGER.error("Error retrieving API version: {}", errorMessage);
         }
 
         return null;

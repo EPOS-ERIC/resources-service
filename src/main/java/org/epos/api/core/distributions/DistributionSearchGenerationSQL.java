@@ -20,11 +20,11 @@ import org.epos.api.facets.Facets;
 import org.epos.eposdatamodel.User;
 import org.epos.api.beans.*;
 import org.epos.api.beans.DiscoveryItem.DiscoveryItemBuilder;
+import org.epos.api.core.AvailableFormatsBuilder;
 import org.epos.api.core.DataServiceProviderGeneration;
 import org.epos.api.core.DataServiceProviderGenerationSQL;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.core.ZabbixExecutor;
-import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.facets.FacetsGeneration;
 import org.epos.api.facets.Node;
 import org.epos.eposdatamodel.Organization;
@@ -47,11 +47,6 @@ public class DistributionSearchGenerationSQL {
 
     // Pre-computed API path constants to avoid repeated string concatenation
     private static final String API_PATH_DETAILS = EnvironmentVariables.API_CONTEXT + "/resources/details/";
-    private static final String API_PATH_EXECUTE = EnvironmentVariables.API_CONTEXT + "/execute/";
-    private static final String API_PATH_EXECUTE_OGC = EnvironmentVariables.API_CONTEXT + "/ogcexecute/";
-    private static final String API_FORMAT = "?format=";
-    private static final String API_INPUT_FORMAT = "inputFormat=";
-    private static final String API_PLUGIN_ID = "pluginId=";
 
     private static final String PARAMETER__SCIENCE_DOMAIN = "sciencedomains";
     private static final String PARAMETER__SERVICE_TYPE = "servicetypes";
@@ -61,7 +56,6 @@ public class DistributionSearchGenerationSQL {
     private static final String SPATIAL_SEPARATOR_TRIMMED = "#EPOS#";
 
     // Compiled patterns for hot-path regex operations
-    private static final Pattern GEOJSON_PATTERN = Pattern.compile(".*geo(?:json|\\+json|-json).*", Pattern.CASE_INSENSITIVE);
     private static final Pattern WHITESPACE_SPLIT_PATTERN = Pattern.compile("[\\s,;]+");
     private static final Pattern KEYWORD_SPLIT_PATTERN = Pattern.compile("[,\t]+");
 
@@ -791,8 +785,8 @@ public class DistributionSearchGenerationSQL {
             List<String> categoryList = parseCategoryUidsAndCollect(categoriesJson, filterData.scienceDomains);
             collectServiceTypes(serviceTypesJson, filterData.serviceTypes);
 
-            // Build available formats list
-            List<AvailableFormat> availableFormats = buildAvailableFormats(
+            // Build available formats list using shared builder
+            List<AvailableFormat> availableFormats = AvailableFormatsBuilder.buildFromSearchData(
                     instanceId, downloadUrls, originalFormat, operationReturns, availableFormatsJson, serviceValues);
 
             DataServiceProvider dataServiceProvider = parseFirstServiceProvider(serviceProvidersJson);
@@ -1010,216 +1004,6 @@ public class DistributionSearchGenerationSQL {
             return null;
         }
         return field.asText(null);
-    }
-
-    /**
-     * Builds the list of available formats based on download URLs, encoding formats,
-     * and detected service types (WMS, WFS, WMTS).
-     */
-    private static List<AvailableFormat> buildAvailableFormats(
-            String instanceId, String[] downloadUrls, String originalFormat,
-            String[] operationReturns, String availableFormatsJson, String serviceValues) {
-
-        List<AvailableFormat> formats = new ArrayList<>(8);
-
-        // Add download URL format if available
-        if (downloadUrls != null && downloadUrls.length > 0 && originalFormat != null) {
-            int lastSlash = originalFormat.lastIndexOf('/');
-            String format = lastSlash >= 0 ? originalFormat.substring(lastSlash + 1) : originalFormat;
-            formats.add(new AvailableFormat.AvailableFormatBuilder()
-                    .originalFormat(format)
-                    .format(format)
-                    .href(String.join(",", downloadUrls))
-                    .label(format.toUpperCase())
-                    .type(AvailableFormatType.ORIGINAL)
-                    .build());
-        }
-
-        // Add plugin-based converted formats
-        addPluginFormats(instanceId, formats);
-
-        // Add encoding-based formats from operation mappings
-        addEncodingFormats(instanceId, availableFormatsJson, serviceValues, formats);
-
-        // Fallback to operation returns if no encoding formats found
-        if (formats.isEmpty() && operationReturns != null) {
-            for (String ret : operationReturns) {
-                if (ret != null) {
-                    addReturnFormat(instanceId, ret, formats);
-                }
-            }
-        }
-
-        return formats;
-    }
-
-    /**
-     * Adds converted formats from registered plugins.
-     */
-    private static void addPluginFormats(String instanceId, List<AvailableFormat> formats) {
-        try {
-            Map<String, List<Plugin.Relations>> plugins = DatabaseConnections.getInstance().getPlugins();
-            List<Plugin.Relations> relations = plugins.get(instanceId);
-            if (relations == null) {
-                return;
-            }
-
-            for (Plugin.Relations relation : relations) {
-                String outputFormat = relation.getOutputFormat();
-                String inputFormat = relation.getInputFormat();
-                String pluginId = relation.getPluginId();
-
-                String label;
-                if (outputFormat.contains("geo+json") || outputFormat.contains("geo.json")) {
-                    label = "GEOJSON";
-                } else if (outputFormat.contains("covjson")) {
-                    label = "COVJSON";
-                } else {
-                    continue;
-                }
-
-                formats.add(new AvailableFormatConverted.AvailableFormatConvertedBuilder()
-                        .inputFormat(inputFormat)
-                        .pluginId(pluginId)
-                        .originalFormat(inputFormat)
-                        .format(outputFormat)
-                        .href(buildHrefConverted(instanceId, outputFormat, inputFormat, pluginId))
-                        .label(label)
-                        .type(AvailableFormatType.CONVERTED)
-                        .build());
-            }
-        } catch (Exception e) {
-            LOGGER.warn("Failed to process plugins for instance {}: {}", instanceId, e.getMessage());
-        }
-    }
-
-    /**
-     * Adds formats derived from encoding format mappings in operation parameters.
-     */
-    private static void addEncodingFormats(String instanceId, String availableFormatsJson,
-                                           String serviceValues, List<AvailableFormat> formats) {
-        if (isEmptyJson(availableFormatsJson)) {
-            return;
-        }
-
-        try {
-            JsonNode arrayNode = OBJECT_MAPPER.readTree(availableFormatsJson);
-            for (JsonNode formatNode : arrayNode) {
-                String paramValue = getTextOrNull(formatNode, "format");
-                if (paramValue == null) {
-                    continue;
-                }
-
-                String template = getTextOrNull(formatNode, "template");
-                String variable = getTextOrNull(formatNode, "variable");
-                String defaultValue = getTextOrNull(formatNode, "default_value");
-
-                String templateLower = template != null ? template.toLowerCase() : "";
-                String variableLower = variable != null ? variable.toLowerCase() : "";
-                String defaultValueLower = defaultValue != null ? defaultValue.toLowerCase() : "";
-
-                // Detect OGC service types
-                boolean isWMS = detectServiceType(templateLower, variableLower, paramValue, defaultValueLower, serviceValues, "wms");
-                boolean isWMTS = detectServiceType(templateLower, variableLower, paramValue, defaultValueLower, serviceValues, "wmts");
-                boolean isWFS = detectServiceType(templateLower, variableLower, paramValue, defaultValueLower, serviceValues, "wfs");
-
-                if (paramValue.startsWith("image/")) {
-                    if (isWMS) {
-                        formats.add(createOgcFormat(instanceId, paramValue, "application/vnd.ogc.wms_xml", "WMS"));
-                    } else if (isWMTS) {
-                        formats.add(createOgcFormat(instanceId, paramValue, "application/vnd.ogc.wmts_xml", "WMTS"));
-                    }
-                } else if ("json".equals(paramValue) && isWFS) {
-                    formats.add(createGeoJsonFormat(instanceId, paramValue, "json"));
-                } else if (paramValue.contains("geo%2Bjson") || GEOJSON_PATTERN.matcher(paramValue).matches()) {
-                    formats.add(createGeoJsonFormat(instanceId, paramValue, paramValue));
-                } else {
-                    formats.add(new AvailableFormat.AvailableFormatBuilder()
-                            .originalFormat(paramValue)
-                            .format(paramValue)
-                            .href(buildHref(instanceId, paramValue))
-                            .label(paramValue.toUpperCase())
-                            .type(AvailableFormatType.ORIGINAL)
-                            .build());
-                }
-            }
-        } catch (JsonProcessingException e) {
-            LOGGER.warn("Failed to parse encoding formats: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Detects if a specific OGC service type is indicated by the format parameters.
-     */
-    private static boolean detectServiceType(String templateLower, String variableLower,
-                                             String paramValue, String defaultValueLower, String serviceValues, String serviceType) {
-        String servicePattern = "service=" + serviceType;
-        String serviceUpper = serviceType.toUpperCase();
-
-        return templateLower.contains(servicePattern)
-                || ("service".equals(variableLower) && (paramValue.contains(serviceUpper) || defaultValueLower.contains(serviceType)))
-                || (serviceValues != null && serviceValues.contains(serviceUpper));
-    }
-
-    /**
-     * Creates an OGC service format entry (WMS, WMTS).
-     */
-    private static AvailableFormat createOgcFormat(String instanceId, String original, String format, String label) {
-        return new AvailableFormat.AvailableFormatBuilder()
-                .originalFormat(original)
-                .format(format)
-                .href(buildHrefOgc(instanceId))
-                .label(label)
-                .type(AvailableFormatType.ORIGINAL)
-                .build();
-    }
-
-    /**
-     * Creates a GeoJSON format entry.
-     */
-    private static AvailableFormat createGeoJsonFormat(String instanceId, String original, String formatParam) {
-        return new AvailableFormat.AvailableFormatBuilder()
-                .originalFormat(original)
-                .format("application/epos.geo+json")
-                .href(buildHref(instanceId, formatParam))
-                .label("GEOJSON (" + original + ")")
-                .type(AvailableFormatType.ORIGINAL)
-                .build();
-    }
-
-    /**
-     * Adds a format entry based on operation return type.
-     */
-    private static void addReturnFormat(String instanceId, String returnType, List<AvailableFormat> formats) {
-        if (returnType.contains("geojson") || returnType.contains("geo+json")) {
-            formats.add(new AvailableFormat.AvailableFormatBuilder()
-                    .originalFormat(returnType)
-                    .format("application/epos.geo+json")
-                    .href(buildHref(instanceId, returnType))
-                    .label("GEOJSON")
-                    .type(AvailableFormatType.ORIGINAL)
-                    .build());
-        } else {
-            formats.add(new AvailableFormat.AvailableFormatBuilder()
-                    .originalFormat(returnType)
-                    .format(returnType)
-                    .href(buildHref(instanceId, returnType))
-                    .label(returnType.toUpperCase())
-                    .type(AvailableFormatType.ORIGINAL)
-                    .build());
-        }
-    }
-
-    private static String buildHref(String instanceId, String format) {
-        return EnvironmentVariables.API_HOST + API_PATH_EXECUTE + instanceId + API_FORMAT + format;
-    }
-
-    private static String buildHrefConverted(String instanceId, String outputFormat, String inputFormat, String pluginId) {
-        return buildHref(instanceId, outputFormat) + "&" + API_INPUT_FORMAT + inputFormat + "&" + API_PLUGIN_ID + pluginId;
-    }
-
-    private static String buildHrefOgc(String instanceId) {
-        return EnvironmentVariables.API_HOST + API_PATH_EXECUTE_OGC + instanceId;
     }
 
     /**
