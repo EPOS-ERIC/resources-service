@@ -77,7 +77,7 @@ public class DataServiceProviderGenerationSQL {
         StringBuilder sql = new StringBuilder();
 
         sql.append("WITH target_orgs AS ( ");
-        sql.append("  SELECT o.instance_id, o.legalname, o.url, o.logo, o.address ");
+        sql.append("  SELECT o.instance_id, o.legalname, o.url, o.logo, o.address_id ");
         sql.append("  FROM metadata_catalogue.organization o ");
         sql.append("  WHERE o.instance_id IN (");
         for (int i = 0; i < instanceIds.size(); i++) {
@@ -91,7 +91,7 @@ public class DataServiceProviderGenerationSQL {
         sql.append("org_addresses AS ( ");
         sql.append("  SELECT t.instance_id, a.country ");
         sql.append("  FROM target_orgs t ");
-        sql.append("  LEFT JOIN metadata_catalogue.address a ON t.address = a.instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.address a ON t.address_id = a.instance_id ");
         sql.append("), ");
 
         // Get related organizations (organizations that are member_of target orgs)
@@ -102,7 +102,7 @@ public class DataServiceProviderGenerationSQL {
         sql.append("  FROM target_orgs t ");
         sql.append("  JOIN metadata_catalogue.organization_memberof om ON om.organization_instance_id_memberof = t.instance_id ");
         sql.append("  JOIN metadata_catalogue.organization o ON om.organization_instance_id = o.instance_id ");
-        sql.append("  LEFT JOIN metadata_catalogue.address a ON o.address = a.instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.address a ON o.address_id = a.instance_id ");
         sql.append("  WHERE o.legalname IS NOT NULL ");
         sql.append(") ");
 
