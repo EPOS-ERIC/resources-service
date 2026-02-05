@@ -805,6 +805,8 @@ public class DistributionSearchGenerationSQL {
                     .title(title)
                     .description(description)
                     .dataServiceProvider(dataServiceProvider)
+                    .versioningStatus(user != null && parameters.containsKey("versioningStatus") ? versioningStatus : null)
+                    .editorId(user != null && parameters.containsKey("versioningStatus") ? editorId : null)
                     .availableFormats(availableFormats)
                     .sha256id(uid != null ? DigestUtils.sha256Hex(uid) : "")
                     .dataProvider(facetsDataProviders)
