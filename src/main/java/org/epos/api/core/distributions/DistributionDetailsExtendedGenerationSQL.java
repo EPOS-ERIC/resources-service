@@ -684,7 +684,7 @@ public class DistributionDetailsExtendedGenerationSQL {
         Webservice webservice = new Webservice();
         webservice.setName(name);
         webservice.setDescription(description);
-        webservice.setDocumentation(documentation);
+        webservice.setDocumentation(extractDocumentationUri(documentation));
 
         // Provider
         if (!isEmptyJson(providerJson) && !"{}".equals(providerJson)) {
@@ -970,6 +970,25 @@ public class DistributionDetailsExtendedGenerationSQL {
             formatted = formatted + "Z";
         }
         return formatted;
+    }
+
+    /**
+     * Extracts the "Uri" value from a documentation JSON object.
+     * Example input: {"Title":"...","Description":"...","Uri":"https://..."}
+     * Returns only the Uri value, or null if not found or invalid JSON.
+     */
+    private static String extractDocumentationUri(String documentationJson) {
+        if (isEmptyJson(documentationJson) || "{}".equals(documentationJson)) {
+            return null;
+        }
+
+        try {
+            JsonNode node = OBJECT_MAPPER.readTree(documentationJson);
+            return getTextOrNull(node, "Uri");
+        } catch (JsonProcessingException e) {
+            LOGGER.warn("Failed to parse documentation JSON: {}", e.getMessage());
+            return documentationJson; // Return as-is if not valid JSON (backwards compatibility)
+        }
     }
 
     private static boolean isEmptyJson(String json) {

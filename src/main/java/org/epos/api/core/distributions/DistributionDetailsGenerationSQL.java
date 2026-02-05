@@ -461,7 +461,7 @@ public class DistributionDetailsGenerationSQL {
         if (webserviceId != null) {
             distribution.setServiceName(wsName);
             distribution.setServiceDescription(wsDescription);
-            distribution.setServiceDocumentation(wsDocumentation);
+            distribution.setServiceDocumentation(extractDocumentationUri(wsDocumentation));
 
             // Service provider
             parseServiceProvider(distribution, wsProviderJson);
@@ -865,6 +865,25 @@ public class DistributionDetailsGenerationSQL {
         FacetsNodeTree categories = FacetsGeneration.generateResponseUsingCategories(discoveryList, facetsType);
         categories.getNodes().forEach(node -> node.setDistributions(null));
         distribution.setCategories(categories.getFacets());
+    }
+
+    /**
+     * Extracts the "Uri" value from a documentation JSON object.
+     * Example input: {"Title":"ahead-restful-bibliography documentation","Description":"...","Uri":"https://..."}
+     * Returns only the Uri value, or null if not found or invalid JSON.
+     */
+    private static String extractDocumentationUri(String documentationJson) {
+        if (isEmptyJson(documentationJson) || "{}".equals(documentationJson)) {
+            return null;
+        }
+
+        try {
+            JsonNode node = OBJECT_MAPPER.readTree(documentationJson);
+            return getTextOrNull(node, "Uri");
+        } catch (JsonProcessingException e) {
+            LOGGER.warn("Failed to parse documentation JSON: {}", e.getMessage());
+            return documentationJson; // Return as-is if not valid JSON (backwards compatibility)
+        }
     }
 
     private static boolean isEmptyJson(String json) {

@@ -1,12 +1,12 @@
-2026-01-24 19:05:33 [main] INFO  o.testcontainers.images.PullPolicy - Image pull policy will be performed by: DefaultPullPolicy()
-2026-01-24 19:05:33 [main] INFO  o.t.utility.ImageNameSubstitutor - Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
-2026-01-24 19:05:33 [main] INFO  o.testcontainers.DockerClientFactory - Testcontainers version: 1.21.0
-2026-01-24 19:05:33 [main] INFO  o.t.d.DockerClientProviderStrategy - Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
-2026-01-24 19:05:34 [main] INFO  o.t.d.DockerMachineClientProviderStrategy - docker-machine executable was not found on PATH ([/usr/local/sbin, /usr/local/bin, /usr/bin, /var/lib/flatpak/exports/bin, /usr/lib/jvm/default/bin, /usr/bin/site_perl, /usr/bin/vendor_perl, /usr/bin/core_perl, /var/lib/snapd/snap/bin, /home/valerio/.local/bin, /home/valerio/.local/bin])
-2026-01-24 19:05:34 [main] ERROR o.t.d.DockerClientProviderStrategy - Could not find a valid Docker environment. Please check configuration. Attempted configurations were:
+2026-02-05 15:19:40 [main] INFO  o.testcontainers.images.PullPolicy - Image pull policy will be performed by: DefaultPullPolicy()
+2026-02-05 15:19:40 [main] INFO  o.t.utility.ImageNameSubstitutor - Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+2026-02-05 15:19:40 [main] INFO  o.testcontainers.DockerClientFactory - Testcontainers version: 1.21.0
+2026-02-05 15:19:40 [main] INFO  o.t.d.DockerClientProviderStrategy - Loaded org.testcontainers.dockerclient.UnixSocketClientProviderStrategy from ~/.testcontainers.properties, will try it first
+2026-02-05 15:19:41 [main] INFO  o.t.d.DockerMachineClientProviderStrategy - docker-machine executable was not found on PATH ([/home/valerio/.opencode/bin, /usr/local/sbin, /usr/local/bin, /usr/bin, /var/lib/flatpak/exports/bin, /usr/lib/jvm/default/bin, /usr/bin/site_perl, /usr/bin/vendor_perl, /usr/bin/core_perl, /var/lib/snapd/snap/bin, /home/valerio/.local/bin, /home/valerio/.local/bin])
+2026-02-05 15:19:41 [main] ERROR o.t.d.DockerClientProviderStrategy - Could not find a valid Docker environment. Please check configuration. Attempted configurations were:
 	UnixSocketClientProviderStrategy: failed with exception BadRequestException (Status 400: {"message":"client version 1.32 is too old. Minimum supported API version is 1.44, please upgrade your client to a newer version"}
 )
 	DockerDesktopClientProviderStrategy: failed with exception NullPointerException (Cannot invoke "java.nio.file.Path.toString()" because the return value of "org.testcontainers.dockerclient.DockerDesktopClientProviderStrategy.getSocketPath()" is null)As no valid configuration was found, execution cannot continue.
 See https://java.testcontainers.org/on_failure.html for more details.
-2026-01-24 19:05:34 [main] INFO  o.testcontainers.DockerClientFactory - Testcontainers version: 1.21.0
-2026-01-24 19:05:34 [main] INFO  o.testcontainers.DockerClientFactory - Testcontainers version: 1.21.0
+2026-02-05 15:19:41 [main] INFO  o.testcontainers.DockerClientFactory - Testcontainers version: 1.21.0
+2026-02-05 15:19:41 [main] INFO  o.testcontainers.DockerClientFactory - Testcontainers version: 1.21.0
