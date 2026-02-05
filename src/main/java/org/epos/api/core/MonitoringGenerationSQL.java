@@ -87,13 +87,16 @@ public class MonitoringGenerationSQL {
         sql.append("), ");
 
         // CTE 3: Operation info (template URL and mappings)
+        // Use DISTINCT ON to get only one operation per distribution (avoiding duplicates)
         sql.append("operation_info AS ( ");
-        sql.append("  SELECT od.distribution_instance_id, ");
+        sql.append("  SELECT DISTINCT ON (od.distribution_instance_id) ");
+        sql.append("         od.distribution_instance_id, ");
         sql.append("         o.instance_id AS operation_id, ");
         sql.append("         o.template ");
         sql.append("  FROM metadata_catalogue.operation_distribution od ");
         sql.append("  JOIN metadata_catalogue.operation o ON od.operation_instance_id = o.instance_id ");
         sql.append("  WHERE od.distribution_instance_id IN (SELECT instance_id FROM published_distributions) ");
+        sql.append("  ORDER BY od.distribution_instance_id, o.instance_id ");
         sql.append("), ");
 
         // CTE 4: Operation mappings (parameters with default values)
@@ -113,17 +116,21 @@ public class MonitoringGenerationSQL {
         sql.append("), ");
 
         // CTE 5: DataProduct info with DDSS identifier
+        // Use DISTINCT ON to get only one DDSS-ID per distribution (avoiding duplicates)
+        // Only include distributions that have a valid DDSS-ID (matching JPA behavior with continue)
         sql.append("dataproduct_info AS ( ");
-        sql.append("  SELECT ddp.distribution_instance_id, ");
-        sql.append("         dp.instance_id AS dataproduct_id, ");
+        sql.append("  SELECT DISTINCT ON (ddp.distribution_instance_id) ");
+        sql.append("         ddp.distribution_instance_id, ");
         sql.append("         i.value AS ddss_id ");
         sql.append("  FROM metadata_catalogue.distribution_dataproduct ddp ");
         sql.append("  JOIN metadata_catalogue.dataproduct dp ON ddp.dataproduct_instance_id = dp.instance_id ");
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON dp.version_id = v.version_id ");
-        sql.append("  LEFT JOIN metadata_catalogue.dataproduct_identifier dpi ON dp.instance_id = dpi.dataproduct_instance_id ");
-        sql.append("  LEFT JOIN metadata_catalogue.identifier i ON dpi.identifier_instance_id = i.instance_id AND i.type = 'DDSS-ID' ");
+        sql.append("  JOIN metadata_catalogue.dataproduct_identifier dpi ON dp.instance_id = dpi.dataproduct_instance_id ");
+        sql.append("  JOIN metadata_catalogue.identifier i ON dpi.identifier_instance_id = i.instance_id AND i.type = 'DDSS-ID' ");
         sql.append("  WHERE ddp.distribution_instance_id IN (SELECT instance_id FROM published_distributions) ");
         sql.append("    AND v.status = 'PUBLISHED' ");
+        sql.append("    AND i.value IS NOT NULL ");
+        sql.append("  ORDER BY ddp.distribution_instance_id, i.value ");
         sql.append("), ");
 
         // CTE 6: WebService contacts
@@ -162,7 +169,7 @@ public class MonitoringGenerationSQL {
         sql.append("LEFT JOIN dist_titles dt ON pd.instance_id = dt.distribution_instance_id ");
         sql.append("LEFT JOIN operation_info oi ON pd.instance_id = oi.distribution_instance_id ");
         sql.append("LEFT JOIN operation_mappings om ON pd.instance_id = om.distribution_instance_id ");
-        sql.append("LEFT JOIN dataproduct_info dpi ON pd.instance_id = dpi.distribution_instance_id ");
+        sql.append("JOIN dataproduct_info dpi ON pd.instance_id = dpi.distribution_instance_id ");
         sql.append("LEFT JOIN webservice_contacts wc ON pd.instance_id = wc.distribution_instance_id ");
         sql.append("WHERE oi.template IS NOT NULL ");
 
