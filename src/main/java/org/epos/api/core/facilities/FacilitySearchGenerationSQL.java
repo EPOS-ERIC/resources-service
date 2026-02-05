@@ -18,9 +18,11 @@ import org.epos.api.beans.DiscoveryItem;
 import org.epos.api.beans.DiscoveryItem.DiscoveryItemBuilder;
 import org.epos.api.beans.NodeFilters;
 import org.epos.api.beans.SearchResponse;
-import org.epos.api.core.AvailableFormatsGeneration;
 import org.epos.api.core.DataServiceProviderGeneration;
 import org.epos.api.core.EnvironmentVariables;
+import org.epos.api.beans.AvailableFormatConverted;
+import org.epos.api.beans.Plugin;
+import org.epos.api.routines.DatabaseConnections;
 import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
@@ -367,56 +369,153 @@ public class FacilitySearchGenerationSQL {
         return ctx;
     }
 
+    private static final String API_PATH_EXECUTE = EnvironmentVariables.API_CONTEXT + "/execute/";
+    private static final String API_PATH_EXECUTE_OGC = EnvironmentVariables.API_CONTEXT + "/ogcexecute/";
+    private static final java.util.regex.Pattern GEOJSON_PATTERN = java.util.regex.Pattern.compile(".*geo(?:json|\\+json|-json).*", java.util.regex.Pattern.CASE_INSENSITIVE);
+
     /**
      * Fetches distributions that have facility-related categories.
      * A category is of FACILITY type when its scheme has a topConcept with UID 'category:facets/facility-theme'.
+     * 
+     * This method uses pure SQL to fetch all required data including format information,
+     * avoiding JPA calls that would cause performance issues.
      */
     private static Set<DiscoveryItem> fetchFacilityDistributions(EntityManager em, Map<String, Object> parameters,
                                                                   User user, List<String> statuses,
                                                                   Geometry inputGeometry, WKTReader wktReader) {
         Set<DiscoveryItem> items = new HashSet<>();
 
-        StringBuilder sql = new StringBuilder();
-        sql.append("SELECT d.instance_id, d.meta_id, d.uid, ");
-        sql.append("       STRING_AGG(DISTINCT dt.title, ';') AS title, ");
-        sql.append("       STRING_AGG(DISTINCT dd.description, ';') AS description, ");
-        sql.append("       c.uid AS category_uid, ");
-        sql.append("       v.status AS versioning_status, v.editor_id ");
-        sql.append("FROM metadata_catalogue.distribution d ");
-        sql.append("JOIN metadata_catalogue.versioningstatus v ON d.version_id = v.version_id ");
-        sql.append("JOIN metadata_catalogue.distribution_dataproduct ddp ON d.instance_id = ddp.distribution_instance_id ");
-        sql.append("JOIN metadata_catalogue.dataproduct dp ON ddp.dataproduct_instance_id = dp.instance_id ");
-        sql.append("JOIN metadata_catalogue.versioningstatus vdp ON dp.version_id = vdp.version_id ");
-        sql.append("JOIN metadata_catalogue.dataproduct_category dpc ON dp.instance_id = dpc.dataproduct_instance_id ");
-        sql.append("JOIN metadata_catalogue.category c ON dpc.category_instance_id = c.instance_id ");
-        sql.append("JOIN metadata_catalogue.category_scheme cs ON c.in_scheme = cs.instance_id ");
-        // Join to find schemes that have facility-theme as a top concept
-        sql.append("JOIN metadata_catalogue.category_hastopconcept chtc ON cs.instance_id = chtc.category_scheme_instance_id ");
-        sql.append("JOIN metadata_catalogue.category tc ON chtc.category_instance_id = tc.instance_id ");
-        sql.append("LEFT JOIN metadata_catalogue.distribution_title dt ON d.instance_id = dt.distribution_instance_id ");
-        sql.append("LEFT JOIN metadata_catalogue.distribution_description dd ON d.instance_id = dd.distribution_instance_id ");
-        sql.append("WHERE v.status IN (");
+        // Build status list for SQL
+        StringBuilder statusList = new StringBuilder();
         for (int i = 0; i < statuses.size(); i++) {
-            if (i > 0) sql.append(", ");
-            sql.append("'").append(statuses.get(i)).append("'");
+            if (i > 0) statusList.append(", ");
+            statusList.append("'").append(statuses.get(i)).append("'");
         }
-        sql.append(") ");
-        // Filter for facility-theme top concept
-        sql.append("  AND tc.uid = 'category:facets/facility-theme' ");
-        // Also check dataproduct status
-        sql.append("  AND vdp.status IN (");
-        for (int i = 0; i < statuses.size(); i++) {
-            if (i > 0) sql.append(", ");
-            sql.append("'").append(statuses.get(i)).append("'");
-        }
-        sql.append(") ");
+        String statusSql = statusList.toString();
 
+        StringBuilder sql = new StringBuilder(4096);
+        
+        // CTE 1: Base facility distributions
+        sql.append("WITH facility_distributions AS ( ");
+        sql.append("  SELECT DISTINCT d.instance_id, d.meta_id, d.uid, d.format AS original_format, ");
+        sql.append("         v.status AS versioning_status, v.editor_id, c.uid AS category_uid ");
+        sql.append("  FROM metadata_catalogue.distribution d ");
+        sql.append("  JOIN metadata_catalogue.versioningstatus v ON d.version_id = v.version_id ");
+        sql.append("  JOIN metadata_catalogue.distribution_dataproduct ddp ON d.instance_id = ddp.distribution_instance_id ");
+        sql.append("  JOIN metadata_catalogue.dataproduct dp ON ddp.dataproduct_instance_id = dp.instance_id ");
+        sql.append("  JOIN metadata_catalogue.versioningstatus vdp ON dp.version_id = vdp.version_id ");
+        sql.append("  JOIN metadata_catalogue.dataproduct_category dpc ON dp.instance_id = dpc.dataproduct_instance_id ");
+        sql.append("  JOIN metadata_catalogue.category c ON dpc.category_instance_id = c.instance_id ");
+        sql.append("  JOIN metadata_catalogue.category_scheme cs ON c.in_scheme = cs.instance_id ");
+        sql.append("  JOIN metadata_catalogue.category_hastopconcept chtc ON cs.instance_id = chtc.category_scheme_instance_id ");
+        sql.append("  JOIN metadata_catalogue.category tc ON chtc.category_instance_id = tc.instance_id ");
+        sql.append("  WHERE v.status IN (").append(statusSql).append(") ");
+        sql.append("    AND tc.uid = 'category:facets/facility-theme' ");
+        sql.append("    AND vdp.status IN (").append(statusSql).append(") ");
+        
         if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
-            sql.append(" AND (v.status != 'DRAFT' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
-            sql.append(" AND (vdp.status != 'DRAFT' OR vdp.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+            sql.append("    AND (v.status != 'DRAFT' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+            sql.append("    AND (vdp.status != 'DRAFT' OR vdp.editor_id = '").append(user.getAuthIdentifier()).append("') ");
         }
+        sql.append("), ");
 
-        sql.append("GROUP BY d.instance_id, d.meta_id, d.uid, c.uid, v.status, v.editor_id ");
+        // CTE 2: Distribution titles
+        sql.append("dist_titles AS ( ");
+        sql.append("  SELECT dt.distribution_instance_id, STRING_AGG(dt.title, ';' ORDER BY dt.lang) AS title ");
+        sql.append("  FROM metadata_catalogue.distribution_title dt ");
+        sql.append("  WHERE dt.distribution_instance_id IN (SELECT instance_id FROM facility_distributions) ");
+        sql.append("  GROUP BY dt.distribution_instance_id ");
+        sql.append("), ");
+
+        // CTE 3: Distribution descriptions
+        sql.append("dist_descriptions AS ( ");
+        sql.append("  SELECT dd.distribution_instance_id, STRING_AGG(dd.description, ';' ORDER BY dd.lang) AS description ");
+        sql.append("  FROM metadata_catalogue.distribution_description dd ");
+        sql.append("  WHERE dd.distribution_instance_id IN (SELECT instance_id FROM facility_distributions) ");
+        sql.append("  GROUP BY dd.distribution_instance_id ");
+        sql.append("), ");
+
+        // CTE 4: Download URLs
+        sql.append("dist_download_urls AS ( ");
+        sql.append("  SELECT de.distribution_instance_id, ARRAY_AGG(e.value) AS download_urls ");
+        sql.append("  FROM metadata_catalogue.distribution_element de ");
+        sql.append("  JOIN metadata_catalogue.element e ON de.element_instance_id = e.instance_id ");
+        sql.append("  WHERE de.distribution_instance_id IN (SELECT instance_id FROM facility_distributions) ");
+        sql.append("    AND e.type = 'DOWNLOADURL' ");
+        sql.append("  GROUP BY de.distribution_instance_id ");
+        sql.append("), ");
+
+        // CTE 5: Operation info
+        sql.append("operation_info AS ( ");
+        sql.append("  SELECT od.distribution_instance_id, op.instance_id AS operation_id, op.template ");
+        sql.append("  FROM metadata_catalogue.operation_distribution od ");
+        sql.append("  JOIN metadata_catalogue.operation op ON od.operation_instance_id = op.instance_id ");
+        sql.append("  WHERE od.distribution_instance_id IN (SELECT instance_id FROM facility_distributions) ");
+        sql.append("), ");
+
+        // CTE 6: Operation returns
+        sql.append("operation_returns AS ( ");
+        sql.append("  SELECT oi.distribution_instance_id, ARRAY_AGG(DISTINCT e.value) AS returns ");
+        sql.append("  FROM operation_info oi ");
+        sql.append("  JOIN metadata_catalogue.operation_element oe ON oi.operation_id = oe.operation_instance_id ");
+        sql.append("  JOIN metadata_catalogue.element e ON oe.element_instance_id = e.instance_id ");
+        sql.append("  WHERE e.type = 'RETURNS' ");
+        sql.append("  GROUP BY oi.distribution_instance_id ");
+        sql.append("), ");
+
+        // CTE 7: Operation services (WMS, WFS, WMTS detection)
+        sql.append("operation_services AS ( ");
+        sql.append("  SELECT od.distribution_instance_id, STRING_AGG(DISTINCT UPPER(COALESCE(e.value, m.defaultvalue)), ',') AS service_values ");
+        sql.append("  FROM metadata_catalogue.operation_distribution od ");
+        sql.append("  JOIN metadata_catalogue.operation_mapping om ON od.operation_instance_id = om.operation_instance_id ");
+        sql.append("  JOIN metadata_catalogue.mapping m ON om.mapping_instance_id = m.instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.mapping_element me ON m.instance_id = me.mapping_instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.element e ON me.element_instance_id = e.instance_id AND e.type = 'PARAMVALUE' ");
+        sql.append("  WHERE m.variable ILIKE 'service' ");
+        sql.append("    AND od.distribution_instance_id IN (SELECT instance_id FROM facility_distributions) ");
+        sql.append("  GROUP BY od.distribution_instance_id ");
+        sql.append("), ");
+
+        // CTE 8: Encoding formats
+        sql.append("encoding_formats AS ( ");
+        sql.append("  SELECT oi.distribution_instance_id, oi.template, m.variable, m.defaultvalue, ");
+        sql.append("         ARRAY_AGG(DISTINCT e.value) FILTER (WHERE e.value IS NOT NULL) AS param_values ");
+        sql.append("  FROM operation_info oi ");
+        sql.append("  JOIN metadata_catalogue.operation_mapping om ON oi.operation_id = om.operation_instance_id ");
+        sql.append("  JOIN metadata_catalogue.mapping m ON om.mapping_instance_id = m.instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.mapping_element me ON m.instance_id = me.mapping_instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.element e ON me.element_instance_id = e.instance_id AND e.type = 'PARAMVALUE' ");
+        sql.append("  WHERE m.property LIKE '%encodingFormat%' ");
+        sql.append("  GROUP BY oi.distribution_instance_id, oi.template, m.variable, m.defaultvalue ");
+        sql.append("), ");
+
+        // CTE 9: Available formats aggregation
+        sql.append("available_formats_agg AS ( ");
+        sql.append("  SELECT distribution_instance_id, JSONB_AGG(DISTINCT JSONB_BUILD_OBJECT( ");
+        sql.append("    'format', pv.format_value, 'template', template, 'variable', variable, 'default_value', defaultvalue ");
+        sql.append("  )) AS available_formats_data ");
+        sql.append("  FROM encoding_formats ef, LATERAL UNNEST(ef.param_values) AS pv(format_value) ");
+        sql.append("  WHERE ef.param_values IS NOT NULL ");
+        sql.append("  GROUP BY distribution_instance_id ");
+        sql.append(") ");
+
+        // Main SELECT
+        sql.append("SELECT ");
+        sql.append("  fd.instance_id, fd.meta_id, fd.uid, fd.original_format, ");
+        sql.append("  fd.versioning_status, fd.editor_id, fd.category_uid, ");
+        sql.append("  COALESCE(dt.title, '') AS title, ");
+        sql.append("  COALESCE(dd.description, '') AS description, ");
+        sql.append("  COALESCE(CAST(TO_JSON(ddu.download_urls) AS text), '[]') AS download_urls, ");
+        sql.append("  COALESCE(CAST(TO_JSON(oret.returns) AS text), '[]') AS operation_returns, ");
+        sql.append("  COALESCE(CAST(afa.available_formats_data AS text), '[]') AS available_formats_raw, ");
+        sql.append("  COALESCE(os.service_values, '') AS service_values ");
+        sql.append("FROM facility_distributions fd ");
+        sql.append("LEFT JOIN dist_titles dt ON fd.instance_id = dt.distribution_instance_id ");
+        sql.append("LEFT JOIN dist_descriptions dd ON fd.instance_id = dd.distribution_instance_id ");
+        sql.append("LEFT JOIN dist_download_urls ddu ON fd.instance_id = ddu.distribution_instance_id ");
+        sql.append("LEFT JOIN operation_returns oret ON fd.instance_id = oret.distribution_instance_id ");
+        sql.append("LEFT JOIN available_formats_agg afa ON fd.instance_id = afa.distribution_instance_id ");
+        sql.append("LEFT JOIN operation_services os ON fd.instance_id = os.distribution_instance_id ");
 
         LOGGER.debug("Facility distributions SQL: {}", sql.toString());
 
@@ -427,45 +526,27 @@ public class FacilitySearchGenerationSQL {
 
         LOGGER.debug("Facility distributions query returned {} rows", results.size());
 
-        // Collect distribution IDs for batch loading formats
-        List<String> distributionIds = new ArrayList<>();
         for (Object[] row : results) {
-            distributionIds.add((String) row[0]);
-        }
+            int i = 0;
+            String instanceId = (String) row[i++];
+            String metaId = (String) row[i++];
+            String uid = (String) row[i++];
+            String originalFormat = (String) row[i++];
+            String versioningStatus = (String) row[i++];
+            String editorId = (String) row[i++];
+            String categoryUid = (String) row[i++];
+            String title = (String) row[i++];
+            String description = (String) row[i++];
+            String downloadUrlsJson = (String) row[i++];
+            String operationReturnsJson = (String) row[i++];
+            String availableFormatsJson = (String) row[i++];
+            String serviceValues = (String) row[i++];
 
-        // Batch load distributions for format generation
-        Map<String, org.epos.eposdatamodel.Distribution> distributionMap = new HashMap<>();
-        if (!distributionIds.isEmpty()) {
-            @SuppressWarnings("unchecked")
-            List<org.epos.eposdatamodel.Distribution> distributions = 
-                (List<org.epos.eposdatamodel.Distribution>) abstractapis.AbstractAPI
-                    .retrieveAPI(metadataapis.EntityNames.DISTRIBUTION.name())
-                    .retrieveBunch(distributionIds);
-            if (distributions != null) {
-                for (org.epos.eposdatamodel.Distribution dist : distributions) {
-                    if (dist != null) {
-                        distributionMap.put(dist.getInstanceId(), dist);
-                    }
-                }
-            }
-        }
-
-        for (Object[] row : results) {
-            String instanceId = (String) row[0];
-            String metaId = (String) row[1];
-            String uid = (String) row[2];
-            String title = (String) row[3];
-            String description = (String) row[4];
-            String categoryUid = (String) row[5];
-            String versioningStatus = (String) row[6];
-            String editorId = (String) row[7];
-
-            // Generate available formats using the distribution object
-            List<AvailableFormat> availableFormats = new ArrayList<>();
-            org.epos.eposdatamodel.Distribution distribution = distributionMap.get(instanceId);
-            if (distribution != null) {
-                availableFormats = AvailableFormatsGeneration.generate(distribution);
-            }
+            // Build available formats from SQL data
+            String[] downloadUrls = parseJsonArray(downloadUrlsJson);
+            String[] operationReturns = parseJsonArray(operationReturnsJson);
+            List<AvailableFormat> availableFormats = buildDistributionAvailableFormats(
+                    instanceId, downloadUrls, originalFormat, operationReturns, availableFormatsJson, serviceValues);
 
             DiscoveryItem item = new DiscoveryItemBuilder(
                     instanceId,
@@ -485,6 +566,247 @@ public class FacilitySearchGenerationSQL {
         }
 
         return items;
+    }
+
+    /**
+     * Parses a JSON array string to a String array.
+     */
+    private static String[] parseJsonArray(String json) {
+        if (isEmptyJson(json)) {
+            return null;
+        }
+        try {
+            JsonNode arrayNode = OBJECT_MAPPER.readTree(json);
+            if (arrayNode.isArray()) {
+                String[] result = new String[arrayNode.size()];
+                for (int i = 0; i < arrayNode.size(); i++) {
+                    result[i] = arrayNode.get(i).asText();
+                }
+                return result;
+            }
+        } catch (JsonProcessingException e) {
+            LOGGER.warn("Failed to parse JSON array: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Builds the list of available formats based on download URLs, encoding formats,
+     * and detected service types (WMS, WFS, WMTS).
+     */
+    private static List<AvailableFormat> buildDistributionAvailableFormats(
+            String instanceId, String[] downloadUrls, String originalFormat,
+            String[] operationReturns, String availableFormatsJson, String serviceValues) {
+
+        List<AvailableFormat> formats = new ArrayList<>(8);
+
+        // Add download URL format if available
+        if (downloadUrls != null && downloadUrls.length > 0 && originalFormat != null) {
+            int lastSlash = originalFormat.lastIndexOf('/');
+            String format = lastSlash >= 0 ? originalFormat.substring(lastSlash + 1) : originalFormat;
+            formats.add(new AvailableFormat.AvailableFormatBuilder()
+                    .originalFormat(format)
+                    .format(format)
+                    .href(String.join(",", downloadUrls))
+                    .label(format.toUpperCase())
+                    .type(AvailableFormatType.ORIGINAL)
+                    .build());
+        }
+
+        // Add plugin-based converted formats
+        addDistributionPluginFormats(instanceId, formats);
+
+        // Add encoding-based formats from operation mappings
+        addDistributionEncodingFormats(instanceId, availableFormatsJson, serviceValues, formats);
+
+        // Fallback to operation returns if no encoding formats found
+        if (formats.isEmpty() && operationReturns != null) {
+            for (String ret : operationReturns) {
+                if (ret != null) {
+                    addDistributionReturnFormat(instanceId, ret, formats);
+                }
+            }
+        }
+
+        return formats;
+    }
+
+    /**
+     * Adds converted formats from registered plugins.
+     */
+    private static void addDistributionPluginFormats(String instanceId, List<AvailableFormat> formats) {
+        try {
+            Map<String, List<Plugin.Relations>> plugins = DatabaseConnections.getInstance().getPlugins();
+            List<Plugin.Relations> relations = plugins.get(instanceId);
+            if (relations == null) {
+                return;
+            }
+
+            for (Plugin.Relations relation : relations) {
+                String outputFormat = relation.getOutputFormat();
+                String inputFormat = relation.getInputFormat();
+                String pluginId = relation.getPluginId();
+
+                String label;
+                if (outputFormat.contains("geo+json") || outputFormat.contains("geo.json")) {
+                    label = "GEOJSON";
+                } else if (outputFormat.contains("covjson")) {
+                    label = "COVJSON";
+                } else {
+                    continue;
+                }
+
+                formats.add(new AvailableFormatConverted.AvailableFormatConvertedBuilder()
+                        .inputFormat(inputFormat)
+                        .pluginId(pluginId)
+                        .originalFormat(inputFormat)
+                        .format(outputFormat)
+                        .href(buildDistributionHrefConverted(instanceId, outputFormat, inputFormat, pluginId))
+                        .label(label)
+                        .type(AvailableFormatType.CONVERTED)
+                        .build());
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Failed to process plugins for instance {}: {}", instanceId, e.getMessage());
+        }
+    }
+
+    /**
+     * Adds formats derived from encoding format mappings in operation parameters.
+     */
+    private static void addDistributionEncodingFormats(String instanceId, String availableFormatsJson,
+                                                        String serviceValues, List<AvailableFormat> formats) {
+        if (isEmptyJson(availableFormatsJson)) {
+            return;
+        }
+
+        try {
+            JsonNode arrayNode = OBJECT_MAPPER.readTree(availableFormatsJson);
+            for (JsonNode formatNode : arrayNode) {
+                String paramValue = getTextOrNull(formatNode, "format");
+                if (paramValue == null) {
+                    continue;
+                }
+
+                String template = getTextOrNull(formatNode, "template");
+                String variable = getTextOrNull(formatNode, "variable");
+                String defaultValue = getTextOrNull(formatNode, "default_value");
+
+                String templateLower = template != null ? template.toLowerCase() : "";
+                String variableLower = variable != null ? variable.toLowerCase() : "";
+                String defaultValueLower = defaultValue != null ? defaultValue.toLowerCase() : "";
+
+                // Detect OGC service types
+                boolean isWMS = detectDistributionServiceType(templateLower, variableLower, paramValue, defaultValueLower, serviceValues, "wms");
+                boolean isWMTS = detectDistributionServiceType(templateLower, variableLower, paramValue, defaultValueLower, serviceValues, "wmts");
+                boolean isWFS = detectDistributionServiceType(templateLower, variableLower, paramValue, defaultValueLower, serviceValues, "wfs");
+
+                if (paramValue.startsWith("image/")) {
+                    if (isWMS) {
+                        formats.add(createDistributionOgcFormat(instanceId, paramValue, "application/vnd.ogc.wms_xml", "WMS"));
+                    } else if (isWMTS) {
+                        formats.add(createDistributionOgcFormat(instanceId, paramValue, "application/vnd.ogc.wmts_xml", "WMTS"));
+                    }
+                } else if ("json".equals(paramValue) && isWFS) {
+                    formats.add(createDistributionGeoJsonFormat(instanceId, paramValue, "json"));
+                } else if (paramValue.contains("geo%2Bjson") || GEOJSON_PATTERN.matcher(paramValue).matches()) {
+                    formats.add(createDistributionGeoJsonFormat(instanceId, paramValue, paramValue));
+                } else {
+                    formats.add(new AvailableFormat.AvailableFormatBuilder()
+                            .originalFormat(paramValue)
+                            .format(paramValue)
+                            .href(buildDistributionHref(instanceId, paramValue))
+                            .label(paramValue.toUpperCase())
+                            .type(AvailableFormatType.ORIGINAL)
+                            .build());
+                }
+            }
+        } catch (JsonProcessingException e) {
+            LOGGER.warn("Failed to parse encoding formats: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Detects if a specific OGC service type is indicated by the format parameters.
+     */
+    private static boolean detectDistributionServiceType(String templateLower, String variableLower,
+                                                          String paramValue, String defaultValueLower, String serviceValues, String serviceType) {
+        String servicePattern = "service=" + serviceType;
+        String serviceUpper = serviceType.toUpperCase();
+
+        return templateLower.contains(servicePattern)
+                || ("service".equals(variableLower) && (paramValue.contains(serviceUpper) || defaultValueLower.contains(serviceType)))
+                || (serviceValues != null && serviceValues.contains(serviceUpper));
+    }
+
+    /**
+     * Creates an OGC service format entry (WMS, WMTS).
+     */
+    private static AvailableFormat createDistributionOgcFormat(String instanceId, String original, String format, String label) {
+        return new AvailableFormat.AvailableFormatBuilder()
+                .originalFormat(original)
+                .format(format)
+                .href(buildDistributionHrefOgc(instanceId))
+                .label(label)
+                .type(AvailableFormatType.ORIGINAL)
+                .build();
+    }
+
+    /**
+     * Creates a GeoJSON format entry.
+     */
+    private static AvailableFormat createDistributionGeoJsonFormat(String instanceId, String original, String formatParam) {
+        return new AvailableFormat.AvailableFormatBuilder()
+                .originalFormat(original)
+                .format("application/epos.geo+json")
+                .href(buildDistributionHref(instanceId, formatParam))
+                .label("GEOJSON (" + original + ")")
+                .type(AvailableFormatType.ORIGINAL)
+                .build();
+    }
+
+    /**
+     * Adds a format entry based on operation return type.
+     */
+    private static void addDistributionReturnFormat(String instanceId, String returnType, List<AvailableFormat> formats) {
+        if (returnType.contains("geojson") || returnType.contains("geo+json")) {
+            formats.add(new AvailableFormat.AvailableFormatBuilder()
+                    .originalFormat(returnType)
+                    .format("application/epos.geo+json")
+                    .href(buildDistributionHref(instanceId, returnType))
+                    .label("GEOJSON")
+                    .type(AvailableFormatType.ORIGINAL)
+                    .build());
+        } else {
+            formats.add(new AvailableFormat.AvailableFormatBuilder()
+                    .originalFormat(returnType)
+                    .format(returnType)
+                    .href(buildDistributionHref(instanceId, returnType))
+                    .label(returnType.toUpperCase())
+                    .type(AvailableFormatType.ORIGINAL)
+                    .build());
+        }
+    }
+
+    /**
+     * Build href for regular distribution execution.
+     */
+    private static String buildDistributionHref(String instanceId, String format) {
+        return EnvironmentVariables.API_HOST + API_PATH_EXECUTE + instanceId + API_FORMAT + format;
+    }
+
+    /**
+     * Build href for converted format execution.
+     */
+    private static String buildDistributionHrefConverted(String instanceId, String outputFormat, String inputFormat, String pluginId) {
+        return buildDistributionHref(instanceId, outputFormat) + "&inputFormat=" + inputFormat + "&pluginId=" + pluginId;
+    }
+
+    /**
+     * Build href for OGC execution.
+     */
+    private static String buildDistributionHrefOgc(String instanceId) {
+        return EnvironmentVariables.API_HOST + API_PATH_EXECUTE_OGC + instanceId;
     }
 
     private static DiscoveryItem mapRowToDiscoveryItem(Object[] row, Map<String, Object> parameters, User user,
