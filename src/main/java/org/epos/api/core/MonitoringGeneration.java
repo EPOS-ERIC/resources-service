@@ -28,6 +28,10 @@ public class MonitoringGeneration {
 	private static final Logger LOGGER = LoggerFactory.getLogger(MonitoringGeneration.class);
 
 	public static List<MonitoringBean> generate() {
+		// Use SQL implementation if enabled
+		if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
+			return MonitoringGenerationSQL.generate();
+		}
 
 		List<MonitoringBean> monitoringList = new ArrayList<>();
 		List<DataProduct> datasetList = ((List<DataProduct>) AbstractAPI.retrieveAPI(EntityNames.DATAPRODUCT.name())
