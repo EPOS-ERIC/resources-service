@@ -20,6 +20,7 @@ import org.epos.api.beans.ServiceParameter;
 import org.epos.api.beans.SpatialInformation;
 import org.epos.api.beans.TemporalCoverage;
 import org.epos.api.core.AvailableFormatsGeneration;
+import org.epos.api.core.AvailableFormatsGenerationSQL;
 import org.epos.api.core.DataServiceProviderGeneration;
 import org.epos.api.core.DataServiceProviderGenerationSQL;
 import org.epos.api.core.EnvironmentVariables;
@@ -489,9 +490,8 @@ public class DistributionDetailsGenerationSQL {
             parseParameters(distribution, opMappingsJson);
         }
 
-        // Available formats - need to fetch distribution entity for this
-        // For now, we'll use a simplified approach
-        distribution.setAvailableFormats(new ArrayList<>());
+        // Available formats
+        distribution.setAvailableFormats(AvailableFormatsGenerationSQL.generate(instanceId));
 
         // Categories (facets)
         buildCategories(distribution, instanceId, uid, metaId, title, description,
@@ -852,7 +852,7 @@ public class DistributionDetailsGenerationSQL {
                 .metaId(metaId)
                 .title(title)
                 .description(description)
-                .availableFormats(new ArrayList<>())
+                .availableFormats(AvailableFormatsGenerationSQL.generate(instanceId))
                 .sha256id(uid != null ? DigestUtils.sha256Hex(uid) : "")
                 .dataProvider(facetsDataProviders)
                 .serviceProvider(facetsServiceProviders)
