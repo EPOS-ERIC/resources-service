@@ -206,18 +206,19 @@ public class SoftwareSourceCodeGenerationSQL {
         response.setId(instanceId);
         response.setName(name);
         response.setDescription(description);
-        response.setLicenseURL(licenseUrl);
-        response.setDownloadURL(downloadUrl);
-        response.setCodeRepository(codeRepository);
-        response.setMainEntityOfPage(mainEntityOfPage);
-        response.setRuntimePlatform(runtimePlatform);
-        response.setSoftwareVersion(softwareVersion);
-        response.setSoftwareStatus(softwareStatus);
-        response.setSpatial(spatial);
-        response.setTemporal(temporal);
-        response.setSize(fileSize);
-        response.setTimeRequired(timeRequired);
-        response.setSoftwareRequirements(softwareRequirements);
+        response.setLicenseURL(nullIfEmpty(licenseUrl));
+        // downloadURL is not part of the EPOS-DCAT-AP model for SoftwareSourceCode
+        // response.setDownloadURL(downloadUrl);
+        response.setCodeRepository(nullIfEmpty(codeRepository));
+        response.setMainEntityOfPage(nullIfEmpty(mainEntityOfPage));
+        response.setRuntimePlatform(nullIfEmpty(runtimePlatform));
+        response.setSoftwareVersion(nullIfEmpty(softwareVersion));
+        response.setSoftwareStatus(nullIfEmpty(softwareStatus));
+        response.setSpatial(nullIfEmpty(spatial));
+        response.setTemporal(nullIfEmpty(temporal));
+        response.setSize(nullIfEmpty(fileSize));
+        response.setTimeRequired(nullIfEmpty(timeRequired));
+        response.setSoftwareRequirements(nullIfEmpty(softwareRequirements));
 
         // Keywords
         if (keywords != null && !keywords.trim().isEmpty()) {
@@ -357,10 +358,14 @@ public class SoftwareSourceCodeGenerationSQL {
         return json == null || json.isEmpty() || "[]".equals(json) || "null".equals(json);
     }
 
+    private static String nullIfEmpty(String value) {
+        return (value == null || value.trim().isEmpty()) ? null : value;
+    }
+
     private static List<AvailableFormat> createFormatsForSourceCode(String downloadUrl, String codeRepository) {
-        if (downloadUrl != null && !downloadUrl.isEmpty()) {
+        if (downloadUrl != null && !downloadUrl.trim().isEmpty()) {
             return createFormatsFromUrl(downloadUrl);
-        } else if (codeRepository != null && !codeRepository.isEmpty()) {
+        } else if (codeRepository != null && !codeRepository.trim().isEmpty()) {
             return createFormatsFromUrl(codeRepository);
         }
         return null;

@@ -280,21 +280,21 @@ public class SoftwareApplicationGenerationSQL {
         response.setId(instanceId);
         response.setName(name);
         response.setDescription(description);
-        response.setDownloadURL(downloadUrl);
-        response.setInstallURL(installUrl);
-        response.setLicenseURL(licenseUrl);
-        response.setMainEntityOfPage(mainEntityOfPage);
-        response.setSoftwareRequirements(requirements);
-        response.setSoftwareVersion(softwareVersion);
-        response.setSoftwareStatus(softwareStatus);
-        response.setSpatial(spatial);
-        response.setTemporal(temporal);
-        response.setFileSize(fileSize);
-        response.setTimeRequired(timeRequired);
-        response.setProcessorRequirements(processorRequirements);
-        response.setMemoryRequirements(memoryRequirements);
-        response.setStorageRequirements(storageRequirements);
-        if (citation != null && !citation.isEmpty()) {
+        response.setDownloadURL(nullIfEmpty(downloadUrl));
+        response.setInstallURL(nullIfEmpty(installUrl));
+        response.setLicenseURL(nullIfEmpty(licenseUrl));
+        response.setMainEntityOfPage(nullIfEmpty(mainEntityOfPage));
+        response.setSoftwareRequirements(nullIfEmpty(requirements));
+        response.setSoftwareVersion(nullIfEmpty(softwareVersion));
+        response.setSoftwareStatus(nullIfEmpty(softwareStatus));
+        response.setSpatial(nullIfEmpty(spatial));
+        response.setTemporal(nullIfEmpty(temporal));
+        response.setFileSize(nullIfEmpty(fileSize));
+        response.setTimeRequired(nullIfEmpty(timeRequired));
+        response.setProcessorRequirements(nullIfEmpty(processorRequirements));
+        response.setMemoryRequirements(nullIfEmpty(memoryRequirements));
+        response.setStorageRequirements(nullIfEmpty(storageRequirements));
+        if (citation != null && !citation.trim().isEmpty()) {
             response.setCitation(Collections.singletonList(citation));
         }
 
@@ -547,6 +547,10 @@ public class SoftwareApplicationGenerationSQL {
 
     private static boolean isEmptyJson(String json) {
         return json == null || json.isEmpty() || "[]".equals(json) || "null".equals(json);
+    }
+
+    private static String nullIfEmpty(String value) {
+        return (value == null || value.trim().isEmpty()) ? null : value;
     }
 
     private static String getTextOrNull(JsonNode node, String fieldName) {
