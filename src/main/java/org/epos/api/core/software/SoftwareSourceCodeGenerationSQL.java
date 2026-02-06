@@ -77,7 +77,7 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("         ss.licenseurl, ss.downloadurl, ss.coderepository, ss.mainentityofpage, ");
         sql.append("         ss.runtimeplatform, ss.softwareversion, ss.softwarestatus, ");
         sql.append("         ss.spatial, ss.temporal, ss.filesize, ss.timerequired, ");
-        sql.append("         ss.keywords ");
+        sql.append("         ss.keywords, ss.softwarerequirements ");
         sql.append("  FROM metadata_catalogue.softwaresourcecode ss ");
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON ss.version_id = v.version_id ");
         sql.append("  WHERE ss.instance_id = ?1 ");
@@ -116,14 +116,27 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("  GROUP BY scat.softwaresourcecode_instance_id ");
         sql.append("), ");
 
-        // CTE for programming languages (from element table)
-        sql.append("software_languages AS ( ");
+        // CTE for elements (programming languages and citation from element table)
+        sql.append("software_elements AS ( ");
         sql.append("  SELECT se.softwaresourcecode_instance_id AS instance_id, ");
-        sql.append("         JSONB_AGG(e.value) AS programming_languages ");
+        sql.append("         JSONB_AGG(CASE WHEN e.type = 'PROGRAMMINGLANGUAGE' OR e.type IS NULL THEN e.value END) ");
+        sql.append("           FILTER (WHERE e.type = 'PROGRAMMINGLANGUAGE' OR e.type IS NULL) AS programming_languages, ");
+        sql.append("         JSONB_AGG(CASE WHEN e.type = 'CITATION' THEN e.value END) ");
+        sql.append("           FILTER (WHERE e.type = 'CITATION') AS citations ");
         sql.append("  FROM metadata_catalogue.softwaresourcecode_element se ");
         sql.append("  JOIN metadata_catalogue.element e ON se.element_instance_id = e.instance_id ");
         sql.append("  WHERE se.softwaresourcecode_instance_id = ?1 ");
         sql.append("  GROUP BY se.softwaresourcecode_instance_id ");
+        sql.append("), ");
+
+        // CTE for creator UIDs
+        sql.append("software_creators AS ( ");
+        sql.append("  SELECT sc.softwaresourcecode_instance_id AS instance_id, ");
+        sql.append("         JSONB_AGG(le.uid) AS creator_uids ");
+        sql.append("  FROM metadata_catalogue.softwaresourcecode_creator sc ");
+        sql.append("  JOIN metadata_catalogue.linkedentity le ON sc.entity_instance_id = le.instance_id ");
+        sql.append("  WHERE sc.softwaresourcecode_instance_id = ?1 ");
+        sql.append("  GROUP BY sc.softwaresourcecode_instance_id ");
         sql.append(") ");
 
         // Main SELECT
@@ -132,16 +145,19 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("  sb.licenseurl, sb.downloadurl, sb.coderepository, sb.mainentityofpage, ");
         sql.append("  sb.runtimeplatform, sb.softwareversion, sb.softwarestatus, ");
         sql.append("  sb.spatial, sb.temporal, sb.filesize, sb.timerequired, ");
-        sql.append("  sb.keywords, ");
+        sql.append("  sb.keywords, sb.softwarerequirements, ");
         sql.append("  COALESCE(CAST(si.identifiers AS text), '[]') AS identifiers, ");
         sql.append("  COALESCE(sc.contact_count, 0) AS contact_count, ");
         sql.append("  COALESCE(CAST(scat.categories AS text), '[]') AS categories, ");
-        sql.append("  COALESCE(CAST(sl.programming_languages AS text), '[]') AS programming_languages ");
+        sql.append("  COALESCE(CAST(se.programming_languages AS text), '[]') AS programming_languages, ");
+        sql.append("  COALESCE(CAST(se.citations AS text), '[]') AS citations, ");
+        sql.append("  COALESCE(CAST(scr.creator_uids AS text), '[]') AS creator_uids ");
         sql.append("FROM software_base sb ");
         sql.append("LEFT JOIN software_identifiers si ON sb.instance_id = si.instance_id ");
         sql.append("LEFT JOIN software_contacts sc ON sb.instance_id = sc.instance_id ");
         sql.append("LEFT JOIN software_categories scat ON sb.instance_id = scat.instance_id ");
-        sql.append("LEFT JOIN software_languages sl ON sb.instance_id = sl.instance_id ");
+        sql.append("LEFT JOIN software_elements se ON sb.instance_id = se.instance_id ");
+        sql.append("LEFT JOIN software_creators scr ON sb.instance_id = scr.instance_id ");
 
         Query query = em.createNativeQuery(sql.toString());
         query.setParameter(1, instanceId);
@@ -176,10 +192,13 @@ public class SoftwareSourceCodeGenerationSQL {
         String fileSize = (String) row[i++];
         String timeRequired = (String) row[i++];
         String keywords = (String) row[i++];
+        String softwareRequirements = (String) row[i++];
         String identifiersJson = (String) row[i++];
         Long contactCount = ((Number) row[i++]).longValue();
         String categoriesJson = (String) row[i++];
         String programmingLanguagesJson = (String) row[i++];
+        String citationsJson = (String) row[i++];
+        String creatorUidsJson = (String) row[i++];
 
         SoftwareSourceCodeResponse response = new SoftwareSourceCodeResponse();
 
@@ -197,6 +216,7 @@ public class SoftwareSourceCodeGenerationSQL {
         response.setTemporal(temporal);
         response.setSize(fileSize);
         response.setTimeRequired(timeRequired);
+        response.setSoftwareRequirements(softwareRequirements);
 
         // Keywords
         if (keywords != null && !keywords.trim().isEmpty()) {
@@ -260,6 +280,38 @@ public class SoftwareSourceCodeGenerationSQL {
                 response.setProgrammingLanguage(languages.isEmpty() ? null : languages);
             } catch (JsonProcessingException e) {
                 LOGGER.warn("Failed to parse programming languages: {}", e.getMessage());
+            }
+        }
+
+        // Citations
+        if (!isEmptyJson(citationsJson)) {
+            try {
+                JsonNode arrayNode = OBJECT_MAPPER.readTree(citationsJson);
+                List<String> citations = new ArrayList<>();
+                for (JsonNode node : arrayNode) {
+                    if (!node.isNull()) {
+                        citations.add(node.asText());
+                    }
+                }
+                response.setCitation(citations.isEmpty() ? null : citations);
+            } catch (JsonProcessingException e) {
+                LOGGER.warn("Failed to parse citations: {}", e.getMessage());
+            }
+        }
+
+        // Creator UIDs
+        if (!isEmptyJson(creatorUidsJson)) {
+            try {
+                JsonNode arrayNode = OBJECT_MAPPER.readTree(creatorUidsJson);
+                List<String> creators = new ArrayList<>();
+                for (JsonNode node : arrayNode) {
+                    if (!node.isNull()) {
+                        creators.add(node.asText());
+                    }
+                }
+                response.setCreator(creators.isEmpty() ? null : creators);
+            } catch (JsonProcessingException e) {
+                LOGGER.warn("Failed to parse creator UIDs: {}", e.getMessage());
             }
         }
 
