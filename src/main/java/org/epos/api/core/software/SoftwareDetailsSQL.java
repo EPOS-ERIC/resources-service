@@ -7,7 +7,6 @@ import org.epos.api.beans.software.SoftwareApplicationResponse;
 import org.epos.api.beans.software.SoftwareDetailsResponse;
 import org.epos.api.beans.software.SoftwareSourceCodeResponse;
 import org.epos.api.core.distributions.DistributionDetailsGenerationSQL;
-import org.epos.api.facets.Facets;
 import org.epos.handler.dbapi.service.EntityManagerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,7 +45,7 @@ public class SoftwareDetailsSQL {
                 case "DISTRIBUTION":
                     Map<String, Object> params = new HashMap<>();
                     params.put("id", instanceId);
-                    var distribution = DistributionDetailsGenerationSQL.generate(params, Facets.Type.SOFTWARE);
+                    var distribution = DistributionDetailsGenerationSQL.generate(params);
                     response = new SoftwareDetailsResponse("distribution") {
                         public Object getObject() {
                             return distribution;
