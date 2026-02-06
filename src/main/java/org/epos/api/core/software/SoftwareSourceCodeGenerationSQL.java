@@ -129,12 +129,13 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("  GROUP BY se.softwaresourcecode_instance_id ");
         sql.append("), ");
 
-        // CTE for creator UIDs
+        // CTE for creator UIDs (creators can be persons or organizations)
         sql.append("software_creators AS ( ");
         sql.append("  SELECT sc.softwaresourcecode_instance_id AS instance_id, ");
-        sql.append("         JSONB_AGG(le.uid) AS creator_uids ");
+        sql.append("         JSONB_AGG(COALESCE(p.uid, o.uid)) FILTER (WHERE COALESCE(p.uid, o.uid) IS NOT NULL) AS creator_uids ");
         sql.append("  FROM metadata_catalogue.softwaresourcecode_creator sc ");
-        sql.append("  JOIN metadata_catalogue.linkedentity le ON sc.entity_instance_id = le.instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.person p ON sc.entity_instance_id = p.instance_id AND sc.resource_entity = 'PERSON' ");
+        sql.append("  LEFT JOIN metadata_catalogue.organization o ON sc.entity_instance_id = o.instance_id AND sc.resource_entity = 'ORGANIZATION' ");
         sql.append("  WHERE sc.softwaresourcecode_instance_id = ?1 ");
         sql.append("  GROUP BY sc.softwaresourcecode_instance_id ");
         sql.append(") ");

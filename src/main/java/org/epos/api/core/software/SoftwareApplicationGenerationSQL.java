@@ -200,13 +200,14 @@ public class SoftwareApplicationGenerationSQL {
         sql.append("  GROUP BY sb.instance_id ");
         sql.append("), ");
 
-        // Creators
+        // Creators (can be persons or organizations)
         sql.append("software_creators AS ( ");
         sql.append("  SELECT sb.instance_id, ");
-        sql.append("         JSONB_AGG(le.uid) AS creator_uids ");
+        sql.append("         JSONB_AGG(COALESCE(p.uid, o.uid)) FILTER (WHERE COALESCE(p.uid, o.uid) IS NOT NULL) AS creator_uids ");
         sql.append("  FROM software_base sb ");
         sql.append("  JOIN metadata_catalogue.softwareapplication_creator sac ON sb.instance_id = sac.softwareapplication_instance_id ");
-        sql.append("  JOIN metadata_catalogue.linkedentity le ON sac.entity_instance_id = le.instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.person p ON sac.entity_instance_id = p.instance_id AND sac.resource_entity = 'PERSON' ");
+        sql.append("  LEFT JOIN metadata_catalogue.organization o ON sac.entity_instance_id = o.instance_id AND sac.resource_entity = 'ORGANIZATION' ");
         sql.append("  GROUP BY sb.instance_id ");
         sql.append(") ");
 
