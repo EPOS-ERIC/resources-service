@@ -332,8 +332,8 @@ public class DistributionSearchGenerationSQL {
         QueryContext ctx = new QueryContext();
 
         // Extract and validate filter parameters
-        List<String> tempStatuses = getStatusList(parameters, user);
-        List<String> statuses = getStatusList(parameters, user);
+        List<String> tempStatuses = new ArrayList<>(getStatusList(parameters, user));
+        List<String> statuses = new ArrayList<>(getStatusList(parameters, user));
         if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
         String publishedOrNot = tempStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
         List<String> organizations = getListParam(parameters, "organisations");

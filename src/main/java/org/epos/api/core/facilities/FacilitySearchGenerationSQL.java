@@ -124,7 +124,8 @@ public class FacilitySearchGenerationSQL {
             FilterData filterData = new FilterData();
 
             // Get status list based on user permissions
-            List<String> statuses = getStatusList(parameters, user);
+            List<String> statuses = new ArrayList<>(getStatusList(parameters, user));
+
 
             // Build and execute query
             QueryContext ctx = buildFacilitySearchSQL(parameters, user, statuses);
