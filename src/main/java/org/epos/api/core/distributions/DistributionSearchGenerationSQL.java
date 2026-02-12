@@ -356,7 +356,7 @@ public class DistributionSearchGenerationSQL {
                 .append("WHERE v.status IN ('"+publishedOrNot+"')");
 
         // Non-admin users can only see their own drafts or submitted
-        if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
+        if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus") && !statuses.isEmpty()) {
             ctx.sql.append(" OR (v.status IN (");
             for (int i = 0; i < statuses.size(); i++) {
                 if (i > 0) ctx.sql.append(", ");

@@ -243,7 +243,7 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("  JOIN metadata_catalogue.versioningstatus v ON f.version_id = v.version_id ");
         ctx.sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
 
-        if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
+        if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus") && !statuses.isEmpty()) {
             ctx.sql.append(" OR (v.status IN (");
             for (int i = 0; i < statuses.size(); i++) {
                 if (i > 0) ctx.sql.append(", ");
@@ -414,7 +414,7 @@ public class FacilitySearchGenerationSQL {
         sql.append("    AND tc.uid = 'category:facets/software-theme' ");
         sql.append("    AND vdp.status IN ('"+publishedOrNot+"') ");
 
-        if (user != null && !user.getIsAdmin()  && parameters.containsKey("versioningStatus")) {
+        if (user != null && !user.getIsAdmin()  && parameters.containsKey("versioningStatus") && !statuses.isEmpty()) {
             sql.append(" OR (v.status IN (");
             for (int i = 0; i < statuses.size(); i++) {
                 if (i > 0) sql.append(", ");

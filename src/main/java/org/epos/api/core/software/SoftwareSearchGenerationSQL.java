@@ -126,7 +126,7 @@ public class SoftwareSearchGenerationSQL {
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON ss.version_id = v.version_id ");
         sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
 
-        if (user != null && !user.getIsAdmin()  && versioningStatus != null) {
+        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !statuses.isEmpty()) {
             sql.append(" OR (v.status IN (");
             for (int i = 0; i < statuses.size(); i++) {
                 if (i > 0) sql.append(", ");
@@ -187,7 +187,7 @@ public class SoftwareSearchGenerationSQL {
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON sa.version_id = v.version_id ");
         sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
 
-        if (user != null && !user.getIsAdmin()  && versioningStatus != null) {
+        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !statuses.isEmpty()) {
             sql.append(" OR (v.status IN (");
             for (int i = 0; i < statuses.size(); i++) {
                 if (i > 0) sql.append(", ");
@@ -266,7 +266,7 @@ public class SoftwareSearchGenerationSQL {
         sql.append("    AND tc.uid = 'category:facets/software-theme' ");
         sql.append("    AND vdp.status IN ('"+publishedOrNot+"') ");
 
-        if (user != null && !user.getIsAdmin()  && versioningStatus != null) {
+        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !statuses.isEmpty()) {
             sql.append(" OR (v.status IN (");
             for (int i = 0; i < statuses.size(); i++) {
                 if (i > 0) sql.append(", ");
