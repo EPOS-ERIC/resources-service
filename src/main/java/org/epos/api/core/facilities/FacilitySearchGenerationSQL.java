@@ -239,7 +239,7 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("  WHERE v.status IN ").append(statusParams);
 
         if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
-            ctx.sql.append(" AND (v.status != 'DRAFT' OR v.editor_id = ")
+            ctx.sql.append(" AND (v.status = 'PUBLISHED' OR v.editor_id = ")
                     .append(nextParam(ctx, user.getAuthIdentifier())).append(")");
         }
         ctx.sql.append("), ");
@@ -410,8 +410,8 @@ public class FacilitySearchGenerationSQL {
         sql.append("    AND vdp.status IN (").append(statusSql).append(") ");
         
         if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
-            sql.append("    AND (v.status != 'DRAFT' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
-            sql.append("    AND (vdp.status != 'DRAFT' OR vdp.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+            sql.append("    AND (v.status = 'PUBLISHED' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+            sql.append("    AND (vdp.status = 'PUBLISHED' OR vdp.editor_id = '").append(user.getAuthIdentifier()).append("') ");
         }
         sql.append("), ");
 

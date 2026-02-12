@@ -129,7 +129,7 @@ public class SoftwareSearchGenerationSQL {
 
         // Non-admin users can only see their own drafts
         if (user != null && !user.getIsAdmin() && versioningStatus != null) {
-            sql.append("    AND (v.status != 'DRAFT' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+            sql.append("    AND (v.status = 'PUBLISHED' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
         }
         sql.append("), ");
 
@@ -187,7 +187,7 @@ public class SoftwareSearchGenerationSQL {
 
         // Non-admin users can only see their own drafts
         if (user != null && !user.getIsAdmin() && versioningStatus != null) {
-            sql.append("    AND (v.status != 'DRAFT' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+            sql.append("    AND (v.status = 'PUBLISHED' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
         }
         sql.append("), ");
 
@@ -256,9 +256,10 @@ public class SoftwareSearchGenerationSQL {
         sql.append("    AND vdp.status IN (").append(statusSql).append(") ");
 
         if (user != null && !user.getIsAdmin() && versioningStatus != null) {
-            sql.append("    AND (v.status != 'DRAFT' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
-            sql.append("    AND (vdp.status != 'DRAFT' OR vdp.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+            sql.append("    AND (v.status = 'PUBLISHED' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+            sql.append("    AND (vdp.status = 'PUBLISHED' OR vdp.editor_id = '").append(user.getAuthIdentifier()).append("') ");
         }
+
         sql.append("), ");
 
         // Titles
