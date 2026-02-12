@@ -332,7 +332,10 @@ public class DistributionSearchGenerationSQL {
         QueryContext ctx = new QueryContext();
 
         // Extract and validate filter parameters
+        List<String> tempStatuses = getStatusList(parameters, user);
         List<String> statuses = getStatusList(parameters, user);
+        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+        String publishedOrNot = tempStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
         List<String> organizations = getListParam(parameters, "organisations");
         List<String> keywords = cleanKeywords(getListParam(parameters, "keywords"));
         List<String> scienceDomains = getListParam(parameters, PARAMETER__SCIENCE_DOMAIN);
@@ -345,17 +348,21 @@ public class DistributionSearchGenerationSQL {
         ctx.sql.append("WITH ");
 
         // CTE 1: Published Distributions - base set filtered by versioning status
-        String statusParams = nextListParam(ctx, statuses);
         ctx.sql.append("published_distributions AS ( ")
                 .append("SELECT d.instance_id, d.meta_id, d.uid, d.format, d.version_id, ")
                 .append("v.status AS versioning_status, v.change_timestamp, v.editor_id ")
                 .append("FROM metadata_catalogue.distribution d ")
                 .append("JOIN metadata_catalogue.versioningstatus v ON d.version_id = v.version_id ")
-                .append("WHERE v.status IN ").append(statusParams);
+                .append("WHERE v.status IN ('"+publishedOrNot+"')");
 
         // Non-admin users can only see their own drafts or submitted
         if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
-            ctx.sql.append(" AND (v.status = 'PUBLISHED' OR v.editor_id = ")
+            ctx.sql.append(" OR (v.status IN (");
+            for (int i = 0; i < statuses.size(); i++) {
+                if (i > 0) ctx.sql.append(", ");
+                ctx.sql.append("'").append(statuses.get(i)).append("'");
+            }
+            ctx.sql.append(")  AND v.editor_id = ")
                     .append(nextParam(ctx, user.getAuthIdentifier())).append(")");
         }
         ctx.sql.append("), ");
@@ -382,7 +389,7 @@ public class DistributionSearchGenerationSQL {
         }
 
         ctx.sql.append("WHERE ddp.distribution_instance_id IN (SELECT instance_id FROM published_distributions) ")
-                .append("AND v.status IN ").append(statusParams);
+                .append("WHERE v.status IN ('"+publishedOrNot+"')");
 
         // Temporal range filter (inclusive boundaries with NULL handling)
         if (startDate != null) {

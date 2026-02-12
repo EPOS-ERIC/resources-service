@@ -112,6 +112,10 @@ public class SoftwareSearchGenerationSQL {
 
     private static List<Object[]> fetchSoftwareSourceCodes(EntityManager em, String query, List<String> statuses,
                                                             User user, String versioningStatus) {
+
+        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+
         StringBuilder sql = new StringBuilder();
 
         sql.append("WITH source_code_base AS ( ");
@@ -120,16 +124,15 @@ public class SoftwareSearchGenerationSQL {
         sql.append("         v.status AS versioning_status, v.change_timestamp, v.editor_id ");
         sql.append("  FROM metadata_catalogue.softwaresourcecode ss ");
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON ss.version_id = v.version_id ");
-        sql.append("  WHERE v.status IN (");
-        for (int i = 0; i < statuses.size(); i++) {
-            if (i > 0) sql.append(", ");
-            sql.append("'").append(statuses.get(i)).append("'");
-        }
-        sql.append(") ");
+        sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
 
-        // Non-admin users can only see their own drafts
-        if (user != null && !user.getIsAdmin() && versioningStatus != null) {
-            sql.append("    AND (v.status = 'PUBLISHED' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+        if (user != null && !user.getIsAdmin()  && versioningStatus != null) {
+            sql.append(" OR (v.status IN (");
+            for (int i = 0; i < statuses.size(); i++) {
+                if (i > 0) sql.append(", ");
+                sql.append("'").append(statuses.get(i)).append("'");
+            }
+            sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
         }
         sql.append("), ");
 
@@ -170,6 +173,10 @@ public class SoftwareSearchGenerationSQL {
 
     private static List<Object[]> fetchSoftwareApplications(EntityManager em, String query, List<String> statuses,
                                                              User user, String versioningStatus) {
+
+        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+
         StringBuilder sql = new StringBuilder();
 
         sql.append("WITH application_base AS ( ");
@@ -178,16 +185,15 @@ public class SoftwareSearchGenerationSQL {
         sql.append("         v.status AS versioning_status, v.change_timestamp, v.editor_id ");
         sql.append("  FROM metadata_catalogue.softwareapplication sa ");
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON sa.version_id = v.version_id ");
-        sql.append("  WHERE v.status IN (");
-        for (int i = 0; i < statuses.size(); i++) {
-            if (i > 0) sql.append(", ");
-            sql.append("'").append(statuses.get(i)).append("'");
-        }
-        sql.append(") ");
+        sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
 
-        // Non-admin users can only see their own drafts
-        if (user != null && !user.getIsAdmin() && versioningStatus != null) {
-            sql.append("    AND (v.status = 'PUBLISHED' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+        if (user != null && !user.getIsAdmin()  && versioningStatus != null) {
+            sql.append(" OR (v.status IN (");
+            for (int i = 0; i < statuses.size(); i++) {
+                if (i > 0) sql.append(", ");
+                sql.append("'").append(statuses.get(i)).append("'");
+            }
+            sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
         }
         sql.append("), ");
 
@@ -228,6 +234,11 @@ public class SoftwareSearchGenerationSQL {
 
     private static List<Object[]> fetchSoftwareDistributions(EntityManager em, String query, List<String> statuses,
                                                               User user, String versioningStatus) {
+
+        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+
+
         StringBuilder sql = new StringBuilder();
 
         // Build status list for SQL
@@ -251,13 +262,24 @@ public class SoftwareSearchGenerationSQL {
         sql.append("  JOIN metadata_catalogue.category_scheme cs ON c.in_scheme = cs.instance_id ");
         sql.append("  JOIN metadata_catalogue.category_hastopconcept chtc ON cs.instance_id = chtc.category_scheme_instance_id ");
         sql.append("  JOIN metadata_catalogue.category tc ON chtc.category_instance_id = tc.instance_id ");
-        sql.append("  WHERE v.status IN (").append(statusSql).append(") ");
+        sql.append("  WHERE v.status IN ('"+publishedOrNot+"') ");
         sql.append("    AND tc.uid = 'category:facets/software-theme' ");
-        sql.append("    AND vdp.status IN (").append(statusSql).append(") ");
+        sql.append("    AND vdp.status IN ('"+publishedOrNot+"') ");
 
-        if (user != null && !user.getIsAdmin() && versioningStatus != null) {
-            sql.append("    AND (v.status = 'PUBLISHED' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
-            sql.append("    AND (vdp.status = 'PUBLISHED' OR vdp.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+        if (user != null && !user.getIsAdmin()  && versioningStatus != null) {
+            sql.append(" OR (v.status IN (");
+            for (int i = 0; i < statuses.size(); i++) {
+                if (i > 0) sql.append(", ");
+                sql.append("'").append(statuses.get(i)).append("'");
+            }
+            sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
+
+            sql.append(" OR (vdp.status IN (");
+            for (int i = 0; i < statuses.size(); i++) {
+                if (i > 0) sql.append(", ");
+                sql.append("'").append(statuses.get(i)).append("'");
+            }
+            sql.append(")  AND vdp.editor_id = ").append(user.getAuthIdentifier()).append(")");
         }
 
         sql.append("), ");

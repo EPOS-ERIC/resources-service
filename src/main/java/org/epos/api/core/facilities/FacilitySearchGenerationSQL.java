@@ -220,6 +220,10 @@ public class FacilitySearchGenerationSQL {
     }
 
     private static QueryContext buildFacilitySearchSQL(Map<String, Object> parameters, User user, List<String> statuses) {
+
+        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+
         QueryContext ctx = new QueryContext();
 
         List<String> facilityTypes = getListParam(parameters, PARAMETER_FACILITY_TYPES);
@@ -236,10 +240,15 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("         v.status AS versioning_status, v.change_timestamp, v.editor_id ");
         ctx.sql.append("  FROM metadata_catalogue.facility f ");
         ctx.sql.append("  JOIN metadata_catalogue.versioningstatus v ON f.version_id = v.version_id ");
-        ctx.sql.append("  WHERE v.status IN ").append(statusParams);
+        ctx.sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
 
         if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
-            ctx.sql.append(" AND (v.status = 'PUBLISHED' OR v.editor_id = ")
+            ctx.sql.append(" OR (v.status IN (");
+            for (int i = 0; i < statuses.size(); i++) {
+                if (i > 0) ctx.sql.append(", ");
+                ctx.sql.append("'").append(statuses.get(i)).append("'");
+            }
+            ctx.sql.append(")  AND v.editor_id = ")
                     .append(nextParam(ctx, user.getAuthIdentifier())).append(")");
         }
         ctx.sql.append("), ");
@@ -291,7 +300,7 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("  JOIN metadata_catalogue.category c ON TRIM(c.uid) = TRIM(e.type) ");
         ctx.sql.append("  WHERE ei.resource_entity = 'FACILITY' ");
         ctx.sql.append("    AND ei.entity_instance_id IN (SELECT instance_id FROM published_facilities) ");
-        ctx.sql.append("    AND v.status IN ").append(statusParams);
+        ctx.sql.append("    AND v.status IN ('"+publishedOrNot+"')");
         ctx.sql.append("  GROUP BY ei.entity_instance_id ");
         ctx.sql.append("), ");
 
@@ -381,16 +390,11 @@ public class FacilitySearchGenerationSQL {
                                                                   Geometry inputGeometry, WKTReader wktReader) {
         Set<DiscoveryItem> items = new HashSet<>();
 
-        // Build status list for SQL
-        StringBuilder statusList = new StringBuilder();
-        for (int i = 0; i < statuses.size(); i++) {
-            if (i > 0) statusList.append(", ");
-            statusList.append("'").append(statuses.get(i)).append("'");
-        }
-        String statusSql = statusList.toString();
-
         StringBuilder sql = new StringBuilder(4096);
-        
+
+        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+
         // CTE 1: Base facility distributions
         sql.append("WITH facility_distributions AS ( ");
         sql.append("  SELECT DISTINCT d.instance_id, d.meta_id, d.uid, d.format AS original_format, ");
@@ -405,13 +409,24 @@ public class FacilitySearchGenerationSQL {
         sql.append("  JOIN metadata_catalogue.category_scheme cs ON c.in_scheme = cs.instance_id ");
         sql.append("  JOIN metadata_catalogue.category_hastopconcept chtc ON cs.instance_id = chtc.category_scheme_instance_id ");
         sql.append("  JOIN metadata_catalogue.category tc ON chtc.category_instance_id = tc.instance_id ");
-        sql.append("  WHERE v.status IN (").append(statusSql).append(") ");
-        sql.append("    AND tc.uid = 'category:facets/facility-theme' ");
-        sql.append("    AND vdp.status IN (").append(statusSql).append(") ");
-        
-        if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus")) {
-            sql.append("    AND (v.status = 'PUBLISHED' OR v.editor_id = '").append(user.getAuthIdentifier()).append("') ");
-            sql.append("    AND (vdp.status = 'PUBLISHED' OR vdp.editor_id = '").append(user.getAuthIdentifier()).append("') ");
+        sql.append("  WHERE v.status IN ('"+publishedOrNot+"') ");
+        sql.append("    AND tc.uid = 'category:facets/software-theme' ");
+        sql.append("    AND vdp.status IN ('"+publishedOrNot+"') ");
+
+        if (user != null && !user.getIsAdmin()  && parameters.containsKey("versioningStatus")) {
+            sql.append(" OR (v.status IN (");
+            for (int i = 0; i < statuses.size(); i++) {
+                if (i > 0) sql.append(", ");
+                sql.append("'").append(statuses.get(i)).append("'");
+            }
+            sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
+
+            sql.append(" OR (vdp.status IN (");
+            for (int i = 0; i < statuses.size(); i++) {
+                if (i > 0) sql.append(", ");
+                sql.append("'").append(statuses.get(i)).append("'");
+            }
+            sql.append(")  AND vdp.editor_id = ").append(user.getAuthIdentifier()).append(")");
         }
         sql.append("), ");
 
