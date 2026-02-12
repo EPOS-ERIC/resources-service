@@ -389,7 +389,7 @@ public class DistributionSearchGenerationSQL {
         }
 
         ctx.sql.append("WHERE ddp.distribution_instance_id IN (SELECT instance_id FROM published_distributions) ")
-                .append("WHERE v.status IN ('"+publishedOrNot+"')");
+                .append("AND v.status IN ('"+publishedOrNot+"')");
 
         // Temporal range filter (inclusive boundaries with NULL handling)
         if (startDate != null) {
