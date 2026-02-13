@@ -221,9 +221,10 @@ public class FacilitySearchGenerationSQL {
     }
 
     private static QueryContext buildFacilitySearchSQL(Map<String, Object> parameters, User user, List<String> statuses) {
-
-        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+        // Create local copy to avoid mutating the original list
+        List<String> localStatuses = new ArrayList<>(statuses);
+        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
 
         QueryContext ctx = new QueryContext();
 
@@ -235,7 +236,7 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("WITH ");
 
         // CTE 1: Published facilities
-        String statusParams = nextListParam(ctx, statuses);
+        String statusParams = nextListParam(ctx, localStatuses);
         ctx.sql.append("published_facilities AS ( ");
         ctx.sql.append("  SELECT f.instance_id, f.meta_id, f.uid, f.title, f.description, f.type, f.keywords, ");
         ctx.sql.append("         v.status AS versioning_status, v.change_timestamp, v.editor_id ");
@@ -243,11 +244,11 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("  JOIN metadata_catalogue.versioningstatus v ON f.version_id = v.version_id ");
         ctx.sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
 
-        if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus") && !statuses.isEmpty()) {
+        if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus") && !localStatuses.isEmpty()) {
             ctx.sql.append(" OR (v.status IN (");
-            for (int i = 0; i < statuses.size(); i++) {
+            for (int i = 0; i < localStatuses.size(); i++) {
                 if (i > 0) ctx.sql.append(", ");
-                ctx.sql.append("'").append(statuses.get(i)).append("'");
+                ctx.sql.append("'").append(localStatuses.get(i)).append("'");
             }
             ctx.sql.append(")  AND v.editor_id = ")
                     .append(nextParam(ctx, user.getAuthIdentifier())).append(")");
@@ -393,8 +394,10 @@ public class FacilitySearchGenerationSQL {
 
         StringBuilder sql = new StringBuilder(4096);
 
-        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+        // Create local copy to avoid mutating the original list
+        List<String> localStatuses = new ArrayList<>(statuses);
+        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
 
         // CTE 1: Base facility distributions
         sql.append("WITH facility_distributions AS ( ");
@@ -414,18 +417,18 @@ public class FacilitySearchGenerationSQL {
         sql.append("    AND tc.uid = 'category:facets/software-theme' ");
         sql.append("    AND vdp.status IN ('"+publishedOrNot+"') ");
 
-        if (user != null && !user.getIsAdmin()  && parameters.containsKey("versioningStatus") && !statuses.isEmpty()) {
+        if (user != null && !user.getIsAdmin()  && parameters.containsKey("versioningStatus") && !localStatuses.isEmpty()) {
             sql.append(" OR (v.status IN (");
-            for (int i = 0; i < statuses.size(); i++) {
+            for (int i = 0; i < localStatuses.size(); i++) {
                 if (i > 0) sql.append(", ");
-                sql.append("'").append(statuses.get(i)).append("'");
+                sql.append("'").append(localStatuses.get(i)).append("'");
             }
             sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
 
             sql.append(" OR (vdp.status IN (");
-            for (int i = 0; i < statuses.size(); i++) {
+            for (int i = 0; i < localStatuses.size(); i++) {
                 if (i > 0) sql.append(", ");
-                sql.append("'").append(statuses.get(i)).append("'");
+                sql.append("'").append(localStatuses.get(i)).append("'");
             }
             sql.append(")  AND vdp.editor_id = ").append(user.getAuthIdentifier()).append(")");
         }

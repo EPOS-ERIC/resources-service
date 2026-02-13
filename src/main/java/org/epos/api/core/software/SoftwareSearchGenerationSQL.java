@@ -112,9 +112,10 @@ public class SoftwareSearchGenerationSQL {
 
     private static List<Object[]> fetchSoftwareSourceCodes(EntityManager em, String query, List<String> statuses,
                                                             User user, String versioningStatus) {
-
-        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+        // Create local copy to avoid mutating the original list
+        List<String> localStatuses = new ArrayList<>(statuses);
+        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
 
         StringBuilder sql = new StringBuilder();
 
@@ -126,11 +127,11 @@ public class SoftwareSearchGenerationSQL {
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON ss.version_id = v.version_id ");
         sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
 
-        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !statuses.isEmpty()) {
+        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !localStatuses.isEmpty()) {
             sql.append(" OR (v.status IN (");
-            for (int i = 0; i < statuses.size(); i++) {
+            for (int i = 0; i < localStatuses.size(); i++) {
                 if (i > 0) sql.append(", ");
-                sql.append("'").append(statuses.get(i)).append("'");
+                sql.append("'").append(localStatuses.get(i)).append("'");
             }
             sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
         }
@@ -173,9 +174,10 @@ public class SoftwareSearchGenerationSQL {
 
     private static List<Object[]> fetchSoftwareApplications(EntityManager em, String query, List<String> statuses,
                                                              User user, String versioningStatus) {
-
-        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+        // Create local copy to avoid mutating the original list
+        List<String> localStatuses = new ArrayList<>(statuses);
+        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
 
         StringBuilder sql = new StringBuilder();
 
@@ -187,11 +189,11 @@ public class SoftwareSearchGenerationSQL {
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON sa.version_id = v.version_id ");
         sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
 
-        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !statuses.isEmpty()) {
+        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !localStatuses.isEmpty()) {
             sql.append(" OR (v.status IN (");
-            for (int i = 0; i < statuses.size(); i++) {
+            for (int i = 0; i < localStatuses.size(); i++) {
                 if (i > 0) sql.append(", ");
-                sql.append("'").append(statuses.get(i)).append("'");
+                sql.append("'").append(localStatuses.get(i)).append("'");
             }
             sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
         }
@@ -234,18 +236,19 @@ public class SoftwareSearchGenerationSQL {
 
     private static List<Object[]> fetchSoftwareDistributions(EntityManager em, String query, List<String> statuses,
                                                               User user, String versioningStatus) {
-
-        String publishedOrNot = statuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
+        // Create local copy to avoid mutating the original list
+        List<String> localStatuses = new ArrayList<>(statuses);
+        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
 
 
         StringBuilder sql = new StringBuilder();
 
         // Build status list for SQL
         StringBuilder statusList = new StringBuilder();
-        for (int i = 0; i < statuses.size(); i++) {
+        for (int i = 0; i < localStatuses.size(); i++) {
             if (i > 0) statusList.append(", ");
-            statusList.append("'").append(statuses.get(i)).append("'");
+            statusList.append("'").append(localStatuses.get(i)).append("'");
         }
         String statusSql = statusList.toString();
 
@@ -266,18 +269,18 @@ public class SoftwareSearchGenerationSQL {
         sql.append("    AND tc.uid = 'category:facets/software-theme' ");
         sql.append("    AND vdp.status IN ('"+publishedOrNot+"') ");
 
-        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !statuses.isEmpty()) {
+        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !localStatuses.isEmpty()) {
             sql.append(" OR (v.status IN (");
-            for (int i = 0; i < statuses.size(); i++) {
+            for (int i = 0; i < localStatuses.size(); i++) {
                 if (i > 0) sql.append(", ");
-                sql.append("'").append(statuses.get(i)).append("'");
+                sql.append("'").append(localStatuses.get(i)).append("'");
             }
             sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
 
             sql.append(" OR (vdp.status IN (");
-            for (int i = 0; i < statuses.size(); i++) {
+            for (int i = 0; i < localStatuses.size(); i++) {
                 if (i > 0) sql.append(", ");
-                sql.append("'").append(statuses.get(i)).append("'");
+                sql.append("'").append(localStatuses.get(i)).append("'");
             }
             sql.append(")  AND vdp.editor_id = ").append(user.getAuthIdentifier()).append(")");
         }
