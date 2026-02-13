@@ -126,6 +126,12 @@ public class AvailableFormatsBuilder {
     /**
      * Build available formats from pre-fetched data.
      * This is the main entry point for Search classes that already have the data from a batch query.
+     * 
+     * Logic aligned with JPA AvailableFormatsGeneration:
+     * 1. DOWNLOADABLE FILE: If has download URLs, no access service, and has format -> return download format
+     * 2. PLUGINS: Process plugins FIRST (regardless of template existence)
+     * 3. MAPPINGS: Process encoding formats ONLY if template exists
+     * 4. RETURNS: Fallback to operation returns if no formats found (regardless of template)
      *
      * @param input The format input data
      * @return List of available formats
@@ -134,6 +140,7 @@ public class AvailableFormatsBuilder {
         List<AvailableFormat> formats = new ArrayList<>(8);
 
         // DOWNLOADABLE FILE case - no access service and has download URLs
+        // Matches JPA: distribution.getDownloadURL() != null && distribution.getAccessService() == null
         if (input.downloadUrls != null && input.downloadUrls.length > 0 
                 && !input.hasAccessService && input.originalFormat != null) {
             String format = extractFormatFromUri(input.originalFormat);
@@ -142,23 +149,21 @@ public class AvailableFormatsBuilder {
             return formats;
         }
 
-        // If no operation template, return empty formats (matches JPA behavior)
-        // Plugins are only available for webservice distributions with operations
-        if (input.operationTemplate == null || input.operationTemplate.isEmpty()) {
-            LOGGER.debug("No operation template for instance {}, returning empty formats", input.instanceId);
-            return formats;
-        }
-
-        // Add plugin-based converted formats
+        // Process plugins FIRST, regardless of template existence
+        // Matches JPA: plugins are processed before mapping check (lines 143-148 of AvailableFormatsGeneration)
         addPluginFormats(input.instanceId, formats);
 
-        // Add encoding-based formats from operation mappings
-        if (!isEmptyJson(input.availableFormatsJson)) {
-            addEncodingFormats(input.instanceId, input.availableFormatsJson, 
-                    input.operationTemplate, input.serviceValues, formats);
+        // Add encoding-based formats from operation mappings ONLY if template exists
+        // Matches JPA: operation.getMapping() != null && ... && operation.getTemplate() != null (line 151)
+        if (input.operationTemplate != null && !input.operationTemplate.isEmpty()) {
+            if (!isEmptyJson(input.availableFormatsJson)) {
+                addEncodingFormats(input.instanceId, input.availableFormatsJson, 
+                        input.operationTemplate, input.serviceValues, formats);
+            }
         }
 
-        // Fallback to operation returns if no formats found yet
+        // Fallback to operation returns if no formats found yet (regardless of template)
+        // Matches JPA: operation.getReturns() != null && formats.isEmpty() (line 167)
         if (formats.isEmpty() && input.operationReturns != null) {
             for (String ret : input.operationReturns) {
                 if (ret != null && !ret.isEmpty()) {
@@ -244,15 +249,13 @@ public class AvailableFormatsBuilder {
                 }
 
                 String label;
+                // Match exact formats only - aligned with JPA AvailableFormatsGeneration behavior
                 if (outputFormat.equals("application/epos.geo+json")
                         || outputFormat.equals("application/epos.table.geo+json")
-                        || outputFormat.equals("application/epos.map.geo+json")
-                        || outputFormat.contains("geo+json") 
-                        || outputFormat.contains("geo.json")) {
+                        || outputFormat.equals("application/epos.map.geo+json")) {
                     label = "GEOJSON";
                 } else if (outputFormat.equals("application/epos.graph.covjson")
-                        || outputFormat.equals("application/epos.covjson")
-                        || outputFormat.contains("covjson")) {
+                        || outputFormat.equals("application/epos.covjson")) {
                     label = "COVJSON";
                 } else {
                     LOGGER.debug("Skipping plugin with unsupported output format: {}", outputFormat);
@@ -452,7 +455,9 @@ public class AvailableFormatsBuilder {
     }
 
     private static boolean containsServiceInMappings(List<MappingInfo> mappings, String service, MappingInfo currentMap) {
+        // Added Objects::nonNull filter to match JPA AvailableFormatsGeneration behavior
         return mappings.stream()
+                .filter(Objects::nonNull)
                 .anyMatch(e -> e.variable != null
                         && e.variable.equalsIgnoreCase("service")
                         && ((currentMap.paramValues != null && currentMap.paramValues.contains(service))
