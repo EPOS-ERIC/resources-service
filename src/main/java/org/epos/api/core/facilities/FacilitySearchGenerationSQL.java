@@ -130,8 +130,8 @@ public class FacilitySearchGenerationSQL {
             // Build and execute query
             QueryContext ctx = buildFacilitySearchSQL(parameters, user, statuses);
             
-            LOGGER.debug("Generated SQL: {}", ctx.sql.toString());
-            LOGGER.debug("SQL Parameters: {}", ctx.params);
+            LOGGER.info("Generated SQL: {}", ctx.sql.toString());
+            LOGGER.info("SQL Parameters: {}", ctx.params);
             
             Query query = em.createNativeQuery(ctx.sql.toString());
 
@@ -142,7 +142,7 @@ public class FacilitySearchGenerationSQL {
             @SuppressWarnings("unchecked")
             List<Object[]> results = query.getResultList();
 
-            LOGGER.debug("SQL query returned {} rows", results.size());
+            LOGGER.info("SQL query returned {} rows", results.size());
 
             // Prepare spatial filtering if needed
             Geometry inputGeometry = null;
@@ -414,7 +414,7 @@ public class FacilitySearchGenerationSQL {
         sql.append("  JOIN metadata_catalogue.category_hastopconcept chtc ON cs.instance_id = chtc.category_scheme_instance_id ");
         sql.append("  JOIN metadata_catalogue.category tc ON chtc.category_instance_id = tc.instance_id ");
         sql.append("  WHERE v.status IN ('"+publishedOrNot+"') ");
-        sql.append("    AND tc.uid = 'category:facets/software-theme' ");
+        sql.append("    AND tc.uid = 'category:facets/facility-theme' ");
         sql.append("    AND vdp.status IN ('"+publishedOrNot+"') ");
 
         if (user != null && !user.getIsAdmin()  && parameters.containsKey("versioningStatus") && !localStatuses.isEmpty()) {
