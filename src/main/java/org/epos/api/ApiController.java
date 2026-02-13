@@ -33,6 +33,7 @@ import org.epos.api.core.facilities.FacilityDetailsItemGenerationSQL;
 import org.epos.api.core.facilities.FacilitySearchGenerationJPA;
 import org.epos.api.core.facilities.FacilitySearchGenerationSQL;
 import org.epos.api.core.organizations.OrganisationsGeneration;
+import org.epos.api.facets.Facets;
 import org.epos.api.utility.Utils;
 import org.epos.eposdatamodel.User;
 import org.slf4j.Logger;
@@ -71,13 +72,13 @@ abstract class ApiController<T> {
 		case "DETAILS":
 			if(Boolean.valueOf(requestParams.get("extended").toString())) {
 				if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
-					response = Utils.gson.toJson(DistributionDetailsExtendedGenerationSQL.generate(requestParams));
+					response = Utils.gson.toJson(DistributionDetailsExtendedGenerationSQL.generate(requestParams, user));
 				} else {
 					response = Utils.gson.toJson(DistributionDetailsExtendedGenerationJPA.generate(requestParams));
 				}
 			} else {
 				if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
-					response = Utils.gson.toJson(DistributionDetailsGenerationSQL.generate(requestParams));
+					response = Utils.gson.toJson(DistributionDetailsGenerationSQL.generate(requestParams, Facets.Type.DATA, user));
 				} else {
 					response = Utils.gson.toJson(DistributionDetailsGenerationJPA.generate(requestParams));
 				}
@@ -92,7 +93,7 @@ abstract class ApiController<T> {
 			break;
 		case "FACILITYDETAILS":
 			if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
-				response = Utils.gson.toJson(FacilityDetailsItemGenerationSQL.generate(requestParams));
+				response = Utils.gson.toJson(FacilityDetailsItemGenerationSQL.generate(requestParams, user));
 			} else {
 				response = Utils.gson.toJson(FacilityDetailsItemGenerationJPA.generate(requestParams));
 			}

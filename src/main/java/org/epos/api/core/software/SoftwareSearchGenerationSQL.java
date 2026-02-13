@@ -29,6 +29,7 @@ import org.epos.eposdatamodel.User;
 import org.epos.handler.dbapi.service.EntityManagerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import java.util.stream.Collectors;
 
 /**
  * SQL-based implementation for software search.
@@ -112,12 +113,9 @@ public class SoftwareSearchGenerationSQL {
 
     private static List<Object[]> fetchSoftwareSourceCodes(EntityManager em, String query, List<String> statuses,
                                                             User user, String versioningStatus) {
-        // Create local copy to avoid mutating the original list
-        List<String> localStatuses = new ArrayList<>(statuses);
-        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
-
         StringBuilder sql = new StringBuilder();
+        Map<Integer, Object> params = new HashMap<>();
+        int paramIndex = 1;
 
         sql.append("WITH source_code_base AS ( ");
         sql.append("  SELECT ss.instance_id, ss.meta_id, ss.uid, ss.name, ss.description, ");
@@ -125,16 +123,8 @@ public class SoftwareSearchGenerationSQL {
         sql.append("         v.status AS versioning_status, v.change_timestamp, v.editor_id ");
         sql.append("  FROM metadata_catalogue.softwaresourcecode ss ");
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON ss.version_id = v.version_id ");
-        sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
-
-        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !localStatuses.isEmpty()) {
-            sql.append(" OR (v.status IN (");
-            for (int i = 0; i < localStatuses.size(); i++) {
-                if (i > 0) sql.append(", ");
-                sql.append("'").append(localStatuses.get(i)).append("'");
-            }
-            sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
-        }
+        sql.append("  WHERE ");
+        paramIndex = buildVersioningStatusFilter(sql, params, paramIndex, user, versioningStatus, statuses, "v");
         sql.append("), ");
 
         // Categories
@@ -156,15 +146,21 @@ public class SoftwareSearchGenerationSQL {
         sql.append("FROM source_code_base scb ");
         sql.append("LEFT JOIN source_code_categories scc ON scb.instance_id = scc.instance_id ");
 
-        // Apply free text query filter
+        // Apply free text query filter with parameterized query
         if (query != null && !query.trim().isEmpty()) {
-            sql.append("WHERE (scb.name ILIKE '%").append(query.trim()).append("%' ");
-            sql.append("    OR scb.description ILIKE '%").append(query.trim()).append("%') ");
+            sql.append("WHERE (scb.name ILIKE ?").append(paramIndex);
+            params.put(paramIndex++, "%" + query.trim() + "%");
+            sql.append("    OR scb.description ILIKE ?").append(paramIndex);
+            params.put(paramIndex++, "%" + query.trim() + "%");
+            sql.append(") ");
         }
 
         sql.append("ORDER BY scb.instance_id ");
 
         Query nativeQuery = em.createNativeQuery(sql.toString());
+        for (Map.Entry<Integer, Object> entry : params.entrySet()) {
+            nativeQuery.setParameter(entry.getKey(), entry.getValue());
+        }
 
         @SuppressWarnings("unchecked")
         List<Object[]> results = nativeQuery.getResultList();
@@ -174,12 +170,9 @@ public class SoftwareSearchGenerationSQL {
 
     private static List<Object[]> fetchSoftwareApplications(EntityManager em, String query, List<String> statuses,
                                                              User user, String versioningStatus) {
-        // Create local copy to avoid mutating the original list
-        List<String> localStatuses = new ArrayList<>(statuses);
-        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
-
         StringBuilder sql = new StringBuilder();
+        Map<Integer, Object> params = new HashMap<>();
+        int paramIndex = 1;
 
         sql.append("WITH application_base AS ( ");
         sql.append("  SELECT sa.instance_id, sa.meta_id, sa.uid, sa.name, sa.description, ");
@@ -187,16 +180,8 @@ public class SoftwareSearchGenerationSQL {
         sql.append("         v.status AS versioning_status, v.change_timestamp, v.editor_id ");
         sql.append("  FROM metadata_catalogue.softwareapplication sa ");
         sql.append("  JOIN metadata_catalogue.versioningstatus v ON sa.version_id = v.version_id ");
-        sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
-
-        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !localStatuses.isEmpty()) {
-            sql.append(" OR (v.status IN (");
-            for (int i = 0; i < localStatuses.size(); i++) {
-                if (i > 0) sql.append(", ");
-                sql.append("'").append(localStatuses.get(i)).append("'");
-            }
-            sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
-        }
+        sql.append("  WHERE ");
+        paramIndex = buildVersioningStatusFilter(sql, params, paramIndex, user, versioningStatus, statuses, "v");
         sql.append("), ");
 
         // Categories
@@ -218,15 +203,21 @@ public class SoftwareSearchGenerationSQL {
         sql.append("FROM application_base ab ");
         sql.append("LEFT JOIN application_categories ac ON ab.instance_id = ac.instance_id ");
 
-        // Apply free text query filter
+        // Apply free text query filter with parameterized query
         if (query != null && !query.trim().isEmpty()) {
-            sql.append("WHERE (ab.name ILIKE '%").append(query.trim()).append("%' ");
-            sql.append("    OR ab.description ILIKE '%").append(query.trim()).append("%') ");
+            sql.append("WHERE (ab.name ILIKE ?").append(paramIndex);
+            params.put(paramIndex++, "%" + query.trim() + "%");
+            sql.append("    OR ab.description ILIKE ?").append(paramIndex);
+            params.put(paramIndex++, "%" + query.trim() + "%");
+            sql.append(") ");
         }
 
         sql.append("ORDER BY ab.instance_id ");
 
         Query nativeQuery = em.createNativeQuery(sql.toString());
+        for (Map.Entry<Integer, Object> entry : params.entrySet()) {
+            nativeQuery.setParameter(entry.getKey(), entry.getValue());
+        }
 
         @SuppressWarnings("unchecked")
         List<Object[]> results = nativeQuery.getResultList();
@@ -236,21 +227,9 @@ public class SoftwareSearchGenerationSQL {
 
     private static List<Object[]> fetchSoftwareDistributions(EntityManager em, String query, List<String> statuses,
                                                               User user, String versioningStatus) {
-        // Create local copy to avoid mutating the original list
-        List<String> localStatuses = new ArrayList<>(statuses);
-        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
-
-
         StringBuilder sql = new StringBuilder();
-
-        // Build status list for SQL
-        StringBuilder statusList = new StringBuilder();
-        for (int i = 0; i < localStatuses.size(); i++) {
-            if (i > 0) statusList.append(", ");
-            statusList.append("'").append(localStatuses.get(i)).append("'");
-        }
-        String statusSql = statusList.toString();
+        Map<Integer, Object> params = new HashMap<>();
+        int paramIndex = 1;
 
         sql.append("WITH software_distributions AS ( ");
         sql.append("  SELECT DISTINCT d.instance_id, d.meta_id, d.uid, d.format AS original_format, ");
@@ -265,25 +244,12 @@ public class SoftwareSearchGenerationSQL {
         sql.append("  JOIN metadata_catalogue.category_scheme cs ON c.in_scheme = cs.instance_id ");
         sql.append("  JOIN metadata_catalogue.category_hastopconcept chtc ON cs.instance_id = chtc.category_scheme_instance_id ");
         sql.append("  JOIN metadata_catalogue.category tc ON chtc.category_instance_id = tc.instance_id ");
-        sql.append("  WHERE v.status IN ('"+publishedOrNot+"') ");
-        sql.append("    AND tc.uid = 'category:facets/software-theme' ");
-        sql.append("    AND vdp.status IN ('"+publishedOrNot+"') ");
-
-        if (user != null && !user.getIsAdmin()  && versioningStatus != null && !localStatuses.isEmpty()) {
-            sql.append(" OR (v.status IN (");
-            for (int i = 0; i < localStatuses.size(); i++) {
-                if (i > 0) sql.append(", ");
-                sql.append("'").append(localStatuses.get(i)).append("'");
-            }
-            sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
-
-            sql.append(" OR (vdp.status IN (");
-            for (int i = 0; i < localStatuses.size(); i++) {
-                if (i > 0) sql.append(", ");
-                sql.append("'").append(localStatuses.get(i)).append("'");
-            }
-            sql.append(")  AND vdp.editor_id = ").append(user.getAuthIdentifier()).append(")");
-        }
+        sql.append("  WHERE tc.uid = 'category:facets/software-theme' ");
+        sql.append("    AND (");
+        paramIndex = buildVersioningStatusFilter(sql, params, paramIndex, user, versioningStatus, statuses, "v");
+        sql.append(") AND (");
+        paramIndex = buildVersioningStatusFilter(sql, params, paramIndex, user, versioningStatus, statuses, "vdp");
+        sql.append(")");
 
         sql.append("), ");
 
@@ -313,13 +279,19 @@ public class SoftwareSearchGenerationSQL {
         sql.append("LEFT JOIN dist_titles dt ON sd.instance_id = dt.distribution_instance_id ");
         sql.append("LEFT JOIN dist_descriptions dd ON sd.instance_id = dd.distribution_instance_id ");
 
-        // Apply free text query filter
+        // Apply free text query filter with parameterized query
         if (query != null && !query.trim().isEmpty()) {
-            sql.append("WHERE (COALESCE(dt.title, '') ILIKE '%").append(query.trim()).append("%' ");
-            sql.append("    OR COALESCE(dd.description, '') ILIKE '%").append(query.trim()).append("%') ");
+            sql.append("WHERE (COALESCE(dt.title, '') ILIKE ?").append(paramIndex);
+            params.put(paramIndex++, "%" + query.trim() + "%");
+            sql.append("    OR COALESCE(dd.description, '') ILIKE ?").append(paramIndex);
+            params.put(paramIndex++, "%" + query.trim() + "%");
+            sql.append(") ");
         }
 
         Query nativeQuery = em.createNativeQuery(sql.toString());
+        for (Map.Entry<Integer, Object> entry : params.entrySet()) {
+            nativeQuery.setParameter(entry.getKey(), entry.getValue());
+        }
 
         @SuppressWarnings("unchecked")
         List<Object[]> results = nativeQuery.getResultList();
@@ -572,5 +544,73 @@ public class SoftwareSearchGenerationSQL {
 
     private static boolean isEmptyJson(String json) {
         return json == null || json.isEmpty() || "[]".equals(json) || "null".equals(json);
+    }
+
+    /**
+     * Builds the versioning status filter clause for SQL queries.
+     * 
+     * This method implements the access control logic:
+     * - Admin users: can see all requested statuses (no editor_id restriction)
+     * - Authenticated non-admin users: can see PUBLISHED + their own non-published content (filtered by editor_id)
+     * - Unauthenticated users: can only see PUBLISHED
+     * 
+     * @param sql the StringBuilder to append the filter to
+     * @param params the map to store parameter values (using index as key)
+     * @param paramIndex the current parameter index (will be incremented)
+     * @param user the current user (may be null for unauthenticated access)
+     * @param versioningStatus the versioning status parameter from request
+     * @param statuses the list of statuses requested
+     * @param tableAlias the alias for the versioningstatus table (e.g., "v")
+     * @return the new parameter index after adding parameters
+     */
+    private static int buildVersioningStatusFilter(StringBuilder sql, Map<Integer, Object> params, int paramIndex,
+                                                    User user, String versioningStatus, List<String> statuses,
+                                                    String tableAlias) {
+        boolean hasVersioningStatusParam = versioningStatus != null && !versioningStatus.isEmpty();
+        boolean includesPublished = statuses.contains("PUBLISHED");
+        
+        // Get non-PUBLISHED statuses
+        List<String> nonPublishedStatuses = statuses.stream()
+                .filter(s -> !"PUBLISHED".equals(s))
+                .collect(Collectors.toList());
+
+        if (user == null) {
+            // Unauthenticated users: only PUBLISHED
+            sql.append(tableAlias).append(".status = 'PUBLISHED'");
+        } else if (user.getIsAdmin() && hasVersioningStatusParam) {
+            // Admin users: can see all requested statuses without editor_id restriction
+            if (statuses.isEmpty()) {
+                sql.append(tableAlias).append(".status = 'PUBLISHED'");
+            } else {
+                sql.append(tableAlias).append(".status IN (");
+                for (int i = 0; i < statuses.size(); i++) {
+                    if (i > 0) sql.append(", ");
+                    sql.append("?").append(paramIndex);
+                    params.put(paramIndex++, statuses.get(i));
+                }
+                sql.append(")");
+            }
+        } else if (hasVersioningStatusParam && !nonPublishedStatuses.isEmpty()) {
+            // Authenticated non-admin users: PUBLISHED (if requested) + their own non-published content
+            sql.append("(");
+            if (includesPublished) {
+                sql.append(tableAlias).append(".status = 'PUBLISHED'");
+                sql.append(" OR ");
+            }
+            sql.append("(").append(tableAlias).append(".status IN (");
+            for (int i = 0; i < nonPublishedStatuses.size(); i++) {
+                if (i > 0) sql.append(", ");
+                sql.append("?").append(paramIndex);
+                params.put(paramIndex++, nonPublishedStatuses.get(i));
+            }
+            sql.append(") AND ").append(tableAlias).append(".editor_id = ?").append(paramIndex);
+            params.put(paramIndex++, user.getAuthIdentifier());
+            sql.append(")");
+            sql.append(")");
+        } else {
+            // Default: only PUBLISHED
+            sql.append(tableAlias).append(".status = 'PUBLISHED'");
+        }
+        return paramIndex;
     }
 }

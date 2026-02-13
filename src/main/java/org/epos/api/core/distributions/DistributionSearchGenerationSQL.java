@@ -313,6 +313,66 @@ public class DistributionSearchGenerationSQL {
     }
 
     /**
+     * Builds the versioning status filter clause for SQL queries.
+     * 
+     * This method implements the access control logic:
+     * - Admin users: can see all requested statuses (no editor_id restriction)
+     * - Authenticated non-admin users: can see PUBLISHED + their own non-published content (filtered by editor_id)
+     * - Unauthenticated users: can only see PUBLISHED
+     * 
+     * @param ctx the query context for parameter binding
+     * @param user the current user (may be null for unauthenticated access)
+     * @param parameters the request parameters
+     * @param requestedStatuses the list of statuses requested
+     * @param tableAlias the alias for the versioningstatus table (e.g., "v")
+     */
+    private static void buildVersioningStatusFilter(QueryContext ctx, User user, Map<String, Object> parameters,
+                                                     List<String> requestedStatuses, String tableAlias) {
+        boolean hasVersioningStatusParam = parameters.containsKey("versioningStatus");
+        boolean includesPublished = requestedStatuses.contains("PUBLISHED");
+        
+        // Get non-PUBLISHED statuses
+        List<String> nonPublishedStatuses = requestedStatuses.stream()
+                .filter(s -> !"PUBLISHED".equals(s))
+                .collect(Collectors.toList());
+
+        if (user == null) {
+            // Unauthenticated users: only PUBLISHED
+            ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+        } else if (user.getIsAdmin() && hasVersioningStatusParam) {
+            // Admin users: can see all requested statuses without editor_id restriction
+            if (requestedStatuses.isEmpty()) {
+                ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+            } else {
+                ctx.sql.append(tableAlias).append(".status IN (");
+                for (int i = 0; i < requestedStatuses.size(); i++) {
+                    if (i > 0) ctx.sql.append(", ");
+                    ctx.sql.append(nextParam(ctx, requestedStatuses.get(i)));
+                }
+                ctx.sql.append(")");
+            }
+        } else if (hasVersioningStatusParam && !nonPublishedStatuses.isEmpty()) {
+            // Authenticated non-admin users: PUBLISHED (if requested) + their own non-published content
+            ctx.sql.append("(");
+            if (includesPublished) {
+                ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+                ctx.sql.append(" OR ");
+            }
+            ctx.sql.append("(").append(tableAlias).append(".status IN (");
+            for (int i = 0; i < nonPublishedStatuses.size(); i++) {
+                if (i > 0) ctx.sql.append(", ");
+                ctx.sql.append(nextParam(ctx, nonPublishedStatuses.get(i)));
+            }
+            ctx.sql.append(") AND ").append(tableAlias).append(".editor_id = ")
+                    .append(nextParam(ctx, user.getAuthIdentifier())).append(")");
+            ctx.sql.append(")");
+        } else {
+            // Default: only PUBLISHED
+            ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+        }
+    }
+
+    /**
      * Constructs the complete dynamic SQL query with all CTEs and filters.
      *
      * <p>The query uses Common Table Expressions (CTEs) for modularity:</p>
@@ -332,10 +392,7 @@ public class DistributionSearchGenerationSQL {
         QueryContext ctx = new QueryContext();
 
         // Extract and validate filter parameters
-        List<String> tempStatuses = new ArrayList<>(getStatusList(parameters, user));
-        List<String> statuses = new ArrayList<>(getStatusList(parameters, user));
-        if(statuses.contains("PUBLISHED")) statuses.remove("PUBLISHED");
-        String publishedOrNot = tempStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
+        List<String> requestedStatuses = getStatusList(parameters, user);
         List<String> organizations = getListParam(parameters, "organisations");
         List<String> keywords = cleanKeywords(getListParam(parameters, "keywords"));
         List<String> scienceDomains = getListParam(parameters, PARAMETER__SCIENCE_DOMAIN);
@@ -348,23 +405,18 @@ public class DistributionSearchGenerationSQL {
         ctx.sql.append("WITH ");
 
         // CTE 1: Published Distributions - base set filtered by versioning status
+        // Build the status filter based on user permissions:
+        // - Admin users: can see all requested statuses
+        // - Authenticated non-admin users: can see PUBLISHED + their own non-published content
+        // - Unauthenticated users: can only see PUBLISHED
         ctx.sql.append("published_distributions AS ( ")
                 .append("SELECT d.instance_id, d.meta_id, d.uid, d.format, d.version_id, ")
                 .append("v.status AS versioning_status, v.change_timestamp, v.editor_id ")
                 .append("FROM metadata_catalogue.distribution d ")
                 .append("JOIN metadata_catalogue.versioningstatus v ON d.version_id = v.version_id ")
-                .append("WHERE v.status IN ('"+publishedOrNot+"')");
+                .append("WHERE ");
 
-        // Non-admin users can only see their own drafts or submitted
-        if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus") && !statuses.isEmpty()) {
-            ctx.sql.append(" OR (v.status IN (");
-            for (int i = 0; i < statuses.size(); i++) {
-                if (i > 0) ctx.sql.append(", ");
-                ctx.sql.append("'").append(statuses.get(i)).append("'");
-            }
-            ctx.sql.append(")  AND v.editor_id = ")
-                    .append(nextParam(ctx, user.getAuthIdentifier())).append(")");
-        }
+        buildVersioningStatusFilter(ctx, user, parameters, requestedStatuses, "v");
         ctx.sql.append("), ");
 
         // CTE 2: DataProduct Info - with temporal, keyword, and category filters
@@ -389,7 +441,8 @@ public class DistributionSearchGenerationSQL {
         }
 
         ctx.sql.append("WHERE ddp.distribution_instance_id IN (SELECT instance_id FROM published_distributions) ")
-                .append("AND v.status IN ('"+publishedOrNot+"')");
+                .append("AND ");
+        buildVersioningStatusFilter(ctx, user, parameters, requestedStatuses, "v");
 
         // Temporal range filter (inclusive boundaries with NULL handling)
         if (startDate != null) {

@@ -221,11 +221,6 @@ public class FacilitySearchGenerationSQL {
     }
 
     private static QueryContext buildFacilitySearchSQL(Map<String, Object> parameters, User user, List<String> statuses) {
-        // Create local copy to avoid mutating the original list
-        List<String> localStatuses = new ArrayList<>(statuses);
-        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
-
         QueryContext ctx = new QueryContext();
 
         List<String> facilityTypes = getListParam(parameters, PARAMETER_FACILITY_TYPES);
@@ -236,23 +231,13 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("WITH ");
 
         // CTE 1: Published facilities
-        String statusParams = nextListParam(ctx, localStatuses);
         ctx.sql.append("published_facilities AS ( ");
         ctx.sql.append("  SELECT f.instance_id, f.meta_id, f.uid, f.title, f.description, f.type, f.keywords, ");
         ctx.sql.append("         v.status AS versioning_status, v.change_timestamp, v.editor_id ");
         ctx.sql.append("  FROM metadata_catalogue.facility f ");
         ctx.sql.append("  JOIN metadata_catalogue.versioningstatus v ON f.version_id = v.version_id ");
-        ctx.sql.append("  WHERE v.status IN ('"+publishedOrNot+"')");
-
-        if (user != null && !user.getIsAdmin() && parameters.containsKey("versioningStatus") && !localStatuses.isEmpty()) {
-            ctx.sql.append(" OR (v.status IN (");
-            for (int i = 0; i < localStatuses.size(); i++) {
-                if (i > 0) ctx.sql.append(", ");
-                ctx.sql.append("'").append(localStatuses.get(i)).append("'");
-            }
-            ctx.sql.append(")  AND v.editor_id = ")
-                    .append(nextParam(ctx, user.getAuthIdentifier())).append(")");
-        }
+        ctx.sql.append("  WHERE ");
+        buildVersioningStatusFilter(ctx, user, parameters, statuses, "v");
         ctx.sql.append("), ");
 
         // CTE 2: Facility categories
@@ -293,6 +278,7 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("), ");
 
         // CTE 6: Equipment types for each facility
+        // Note: Equipment status is always PUBLISHED for this CTE (equipment visibility is tied to facility visibility)
         ctx.sql.append("equipment_types_agg AS ( ");
         ctx.sql.append("  SELECT ei.entity_instance_id AS facility_instance_id, ");
         ctx.sql.append("         JSONB_AGG(DISTINCT JSONB_BUILD_OBJECT('instance_id', c.instance_id, 'name', c.name)) AS equipment_types ");
@@ -302,7 +288,8 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("  JOIN metadata_catalogue.category c ON TRIM(c.uid) = TRIM(e.type) ");
         ctx.sql.append("  WHERE ei.resource_entity = 'FACILITY' ");
         ctx.sql.append("    AND ei.entity_instance_id IN (SELECT instance_id FROM published_facilities) ");
-        ctx.sql.append("    AND v.status IN ('"+publishedOrNot+"')");
+        ctx.sql.append("    AND ");
+        buildVersioningStatusFilter(ctx, user, parameters, statuses, "v");
         ctx.sql.append("  GROUP BY ei.entity_instance_id ");
         ctx.sql.append("), ");
 
@@ -393,11 +380,8 @@ public class FacilitySearchGenerationSQL {
         Set<DiscoveryItem> items = new HashSet<>();
 
         StringBuilder sql = new StringBuilder(4096);
-
-        // Create local copy to avoid mutating the original list
-        List<String> localStatuses = new ArrayList<>(statuses);
-        String publishedOrNot = localStatuses.contains("PUBLISHED") ? "PUBLISHED" : "";
-        if(localStatuses.contains("PUBLISHED")) localStatuses.remove("PUBLISHED");
+        Map<Integer, Object> params = new HashMap<>();
+        int paramIndex = 1;
 
         // CTE 1: Base facility distributions
         sql.append("WITH facility_distributions AS ( ");
@@ -413,25 +397,12 @@ public class FacilitySearchGenerationSQL {
         sql.append("  JOIN metadata_catalogue.category_scheme cs ON c.in_scheme = cs.instance_id ");
         sql.append("  JOIN metadata_catalogue.category_hastopconcept chtc ON cs.instance_id = chtc.category_scheme_instance_id ");
         sql.append("  JOIN metadata_catalogue.category tc ON chtc.category_instance_id = tc.instance_id ");
-        sql.append("  WHERE v.status IN ('"+publishedOrNot+"') ");
-        sql.append("    AND tc.uid = 'category:facets/facility-theme' ");
-        sql.append("    AND vdp.status IN ('"+publishedOrNot+"') ");
-
-        if (user != null && !user.getIsAdmin()  && parameters.containsKey("versioningStatus") && !localStatuses.isEmpty()) {
-            sql.append(" OR (v.status IN (");
-            for (int i = 0; i < localStatuses.size(); i++) {
-                if (i > 0) sql.append(", ");
-                sql.append("'").append(localStatuses.get(i)).append("'");
-            }
-            sql.append(")  AND v.editor_id = ").append(user.getAuthIdentifier()).append(")");
-
-            sql.append(" OR (vdp.status IN (");
-            for (int i = 0; i < localStatuses.size(); i++) {
-                if (i > 0) sql.append(", ");
-                sql.append("'").append(localStatuses.get(i)).append("'");
-            }
-            sql.append(")  AND vdp.editor_id = ").append(user.getAuthIdentifier()).append(")");
-        }
+        sql.append("  WHERE tc.uid = 'category:facets/facility-theme' ");
+        sql.append("    AND (");
+        paramIndex = buildVersioningStatusFilterSimple(sql, params, paramIndex, user, parameters, statuses, "v");
+        sql.append(") AND (");
+        paramIndex = buildVersioningStatusFilterSimple(sql, params, paramIndex, user, parameters, statuses, "vdp");
+        sql.append(")");
         sql.append("), ");
 
         // CTE 2: Distribution titles
@@ -535,6 +506,9 @@ public class FacilitySearchGenerationSQL {
         LOGGER.debug("Facility distributions SQL: {}", sql.toString());
 
         Query query = em.createNativeQuery(sql.toString());
+        for (Map.Entry<Integer, Object> entry : params.entrySet()) {
+            query.setParameter(entry.getKey(), entry.getValue());
+        }
 
         @SuppressWarnings("unchecked")
         List<Object[]> results = query.getResultList();
@@ -860,5 +834,119 @@ public class FacilitySearchGenerationSQL {
             return null;
         }
         return field.asText(null);
+    }
+
+    /**
+     * Builds the versioning status filter clause for SQL queries.
+     * 
+     * This method implements the access control logic:
+     * - Admin users: can see all requested statuses (no editor_id restriction)
+     * - Authenticated non-admin users: can see PUBLISHED + their own non-published content (filtered by editor_id)
+     * - Unauthenticated users: can only see PUBLISHED
+     * 
+     * @param ctx the query context for parameter binding
+     * @param user the current user (may be null for unauthenticated access)
+     * @param parameters the request parameters
+     * @param requestedStatuses the list of statuses requested
+     * @param tableAlias the alias for the versioningstatus table (e.g., "v")
+     */
+    private static void buildVersioningStatusFilter(QueryContext ctx, User user, Map<String, Object> parameters,
+                                                     List<String> requestedStatuses, String tableAlias) {
+        boolean hasVersioningStatusParam = parameters.containsKey("versioningStatus");
+        boolean includesPublished = requestedStatuses.contains("PUBLISHED");
+        
+        // Get non-PUBLISHED statuses
+        List<String> nonPublishedStatuses = requestedStatuses.stream()
+                .filter(s -> !"PUBLISHED".equals(s))
+                .collect(Collectors.toList());
+
+        if (user == null) {
+            // Unauthenticated users: only PUBLISHED
+            ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+        } else if (user.getIsAdmin() && hasVersioningStatusParam) {
+            // Admin users: can see all requested statuses without editor_id restriction
+            if (requestedStatuses.isEmpty()) {
+                ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+            } else {
+                ctx.sql.append(tableAlias).append(".status IN (");
+                for (int i = 0; i < requestedStatuses.size(); i++) {
+                    if (i > 0) ctx.sql.append(", ");
+                    ctx.sql.append(nextParam(ctx, requestedStatuses.get(i)));
+                }
+                ctx.sql.append(")");
+            }
+        } else if (hasVersioningStatusParam && !nonPublishedStatuses.isEmpty()) {
+            // Authenticated non-admin users: PUBLISHED (if requested) + their own non-published content
+            ctx.sql.append("(");
+            if (includesPublished) {
+                ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+                ctx.sql.append(" OR ");
+            }
+            ctx.sql.append("(").append(tableAlias).append(".status IN (");
+            for (int i = 0; i < nonPublishedStatuses.size(); i++) {
+                if (i > 0) ctx.sql.append(", ");
+                ctx.sql.append(nextParam(ctx, nonPublishedStatuses.get(i)));
+            }
+            ctx.sql.append(") AND ").append(tableAlias).append(".editor_id = ")
+                    .append(nextParam(ctx, user.getAuthIdentifier())).append(")");
+            ctx.sql.append(")");
+        } else {
+            // Default: only PUBLISHED
+            ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+        }
+    }
+
+    /**
+     * Builds versioning status filter using StringBuilder and params map (for methods not using QueryContext).
+     */
+    private static int buildVersioningStatusFilterSimple(StringBuilder sql, Map<Integer, Object> params, int paramIndex,
+                                                          User user, Map<String, Object> parameters,
+                                                          List<String> requestedStatuses, String tableAlias) {
+        boolean hasVersioningStatusParam = parameters.containsKey("versioningStatus");
+        boolean includesPublished = requestedStatuses.contains("PUBLISHED");
+        
+        // Get non-PUBLISHED statuses
+        List<String> nonPublishedStatuses = requestedStatuses.stream()
+                .filter(s -> !"PUBLISHED".equals(s))
+                .collect(Collectors.toList());
+
+        if (user == null) {
+            // Unauthenticated users: only PUBLISHED
+            sql.append(tableAlias).append(".status = 'PUBLISHED'");
+        } else if (user.getIsAdmin() && hasVersioningStatusParam) {
+            // Admin users: can see all requested statuses without editor_id restriction
+            if (requestedStatuses.isEmpty()) {
+                sql.append(tableAlias).append(".status = 'PUBLISHED'");
+            } else {
+                sql.append(tableAlias).append(".status IN (");
+                for (int i = 0; i < requestedStatuses.size(); i++) {
+                    if (i > 0) sql.append(", ");
+                    sql.append("?").append(paramIndex);
+                    params.put(paramIndex++, requestedStatuses.get(i));
+                }
+                sql.append(")");
+            }
+        } else if (hasVersioningStatusParam && !nonPublishedStatuses.isEmpty()) {
+            // Authenticated non-admin users: PUBLISHED (if requested) + their own non-published content
+            sql.append("(");
+            if (includesPublished) {
+                sql.append(tableAlias).append(".status = 'PUBLISHED'");
+                sql.append(" OR ");
+            }
+            sql.append("(").append(tableAlias).append(".status IN (");
+            for (int i = 0; i < nonPublishedStatuses.size(); i++) {
+                if (i > 0) sql.append(", ");
+                sql.append("?").append(paramIndex);
+                params.put(paramIndex++, nonPublishedStatuses.get(i));
+            }
+            sql.append(") AND ").append(tableAlias).append(".editor_id = ?").append(paramIndex);
+            params.put(paramIndex++, user.getAuthIdentifier());
+            sql.append(")");
+            sql.append(")");
+        } else {
+            // Default: only PUBLISHED
+            sql.append(tableAlias).append(".status = 'PUBLISHED'");
+        }
+        return paramIndex;
     }
 }
