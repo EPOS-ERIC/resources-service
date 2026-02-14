@@ -682,7 +682,13 @@ public class DistributionSearchGenerationSQL {
                 .append("'format', pv.format_value, 'template', template, 'variable', variable, 'default_value', defaultvalue ")
                 .append(")) AS available_formats_data ")
                 .append("FROM encoding_formats ef, LATERAL UNNEST(ef.param_values) AS pv(format_value) ")
-                .append("WHERE ef.param_values IS NOT NULL GROUP BY distribution_instance_id ) ");
+                .append("WHERE ef.param_values IS NOT NULL GROUP BY distribution_instance_id ), ");
+
+        // Has Access Service - check if distribution has a linked webservice
+        ctx.sql.append("has_access_service AS ( ")
+                .append("SELECT wd.distribution_instance_id, TRUE AS has_ws ")
+                .append("FROM metadata_catalogue.webservice_distribution wd ")
+                .append("WHERE wd.distribution_instance_id IN (SELECT instance_id FROM filtered_ids) ) ");
     }
 
     /**
@@ -704,7 +710,8 @@ public class DistributionSearchGenerationSQL {
                 .append("COALESCE(CAST(TO_JSON(oret.returns) AS text), '[]') AS operation_returns, ")
                 .append("COALESCE(CAST(TO_JSON(dk.keywords) AS text), '[]') AS keywords, ")
                 .append("COALESCE(dsa.locations, '') || '").append(SPATIAL_SEPARATOR).append("' || COALESCE(wsa.locations, '') AS spatial_locations, ")
-                .append("COALESCE(os.service_values, '') AS service_values ")
+                .append("COALESCE(os.service_values, '') AS service_values, ")
+                .append("COALESCE(has.has_ws, FALSE) AS has_access_service ")
                 .append("FROM published_distributions pd ")
                 .append("JOIN filtered_ids fi ON pd.instance_id = fi.instance_id ")
                 .append("LEFT JOIN dist_titles dt ON pd.instance_id = dt.distribution_instance_id ")
@@ -719,7 +726,8 @@ public class DistributionSearchGenerationSQL {
                 .append("LEFT JOIN dist_keywords dk ON pd.instance_id = dk.distribution_instance_id ")
                 .append("LEFT JOIN dataproduct_spatial_agg dsa ON pd.instance_id = dsa.distribution_instance_id ")
                 .append("LEFT JOIN webservice_spatial_agg wsa ON pd.instance_id = wsa.distribution_instance_id ")
-                .append("LEFT JOIN operation_services os ON pd.instance_id = os.distribution_instance_id ");
+                .append("LEFT JOIN operation_services os ON pd.instance_id = os.distribution_instance_id ")
+                .append("LEFT JOIN has_access_service has ON pd.instance_id = has.distribution_instance_id ");
 
         // Free-text search across title, description, and keywords
         if (freeTextQuery != null && !freeTextQuery.trim().isEmpty()) {
@@ -819,6 +827,7 @@ public class DistributionSearchGenerationSQL {
             String keywordsJson = (String) row[i++];
             String spatialLocationsStr = (String) row[i++];
             String serviceValues = (String) row[i++];
+            Boolean hasAccessService = (Boolean) row[i++];
 
             // Apply spatial intersection filter if bounding box was specified
             if (inputGeometry != null && !checkSpatialIntersection(spatialLocationsStr, inputGeometry, wktReader)) {
@@ -847,7 +856,8 @@ public class DistributionSearchGenerationSQL {
 
             // Build available formats list using shared builder
             List<AvailableFormat> availableFormats = AvailableFormatsBuilder.buildFromSearchData(
-                    instanceId, downloadUrls, originalFormat, operationReturns, availableFormatsJson, serviceValues);
+                    instanceId, downloadUrls, originalFormat, operationReturns, availableFormatsJson, serviceValues,
+                    hasAccessService != null && hasAccessService);
 
             DataServiceProvider dataServiceProvider = parseFirstServiceProvider(serviceProvidersJson);
 

@@ -483,6 +483,13 @@ public class FacilitySearchGenerationSQL {
         sql.append("  FROM encoding_formats ef, LATERAL UNNEST(ef.param_values) AS pv(format_value) ");
         sql.append("  WHERE ef.param_values IS NOT NULL ");
         sql.append("  GROUP BY distribution_instance_id ");
+        sql.append("), ");
+
+        // CTE 10: Has Access Service - check if distribution has a linked webservice
+        sql.append("has_access_service AS ( ");
+        sql.append("  SELECT wd.distribution_instance_id, TRUE AS has_ws ");
+        sql.append("  FROM metadata_catalogue.webservice_distribution wd ");
+        sql.append("  WHERE wd.distribution_instance_id IN (SELECT instance_id FROM facility_distributions) ");
         sql.append(") ");
 
         // Main SELECT
@@ -494,7 +501,8 @@ public class FacilitySearchGenerationSQL {
         sql.append("  COALESCE(CAST(TO_JSON(ddu.download_urls) AS text), '[]') AS download_urls, ");
         sql.append("  COALESCE(CAST(TO_JSON(oret.returns) AS text), '[]') AS operation_returns, ");
         sql.append("  COALESCE(CAST(afa.available_formats_data AS text), '[]') AS available_formats_raw, ");
-        sql.append("  COALESCE(os.service_values, '') AS service_values ");
+        sql.append("  COALESCE(os.service_values, '') AS service_values, ");
+        sql.append("  COALESCE(has.has_ws, FALSE) AS has_access_service ");
         sql.append("FROM facility_distributions fd ");
         sql.append("LEFT JOIN dist_titles dt ON fd.instance_id = dt.distribution_instance_id ");
         sql.append("LEFT JOIN dist_descriptions dd ON fd.instance_id = dd.distribution_instance_id ");
@@ -502,6 +510,7 @@ public class FacilitySearchGenerationSQL {
         sql.append("LEFT JOIN operation_returns oret ON fd.instance_id = oret.distribution_instance_id ");
         sql.append("LEFT JOIN available_formats_agg afa ON fd.instance_id = afa.distribution_instance_id ");
         sql.append("LEFT JOIN operation_services os ON fd.instance_id = os.distribution_instance_id ");
+        sql.append("LEFT JOIN has_access_service has ON fd.instance_id = has.distribution_instance_id ");
 
         LOGGER.debug("Facility distributions SQL: {}", sql.toString());
 
@@ -531,12 +540,14 @@ public class FacilitySearchGenerationSQL {
             String operationReturnsJson = (String) row[i++];
             String availableFormatsJson = (String) row[i++];
             String serviceValues = (String) row[i++];
+            Boolean hasAccessService = (Boolean) row[i++];
 
             // Build available formats from SQL data using shared builder
             String[] downloadUrls = parseJsonArray(downloadUrlsJson);
             String[] operationReturns = parseJsonArray(operationReturnsJson);
             List<AvailableFormat> availableFormats = AvailableFormatsBuilder.buildFromSearchData(
-                    instanceId, downloadUrls, originalFormat, operationReturns, availableFormatsJson, serviceValues);
+                    instanceId, downloadUrls, originalFormat, operationReturns, availableFormatsJson, serviceValues,
+                    hasAccessService != null && hasAccessService);
 
             DiscoveryItemBuilder item = new DiscoveryItemBuilder(
                     instanceId,
