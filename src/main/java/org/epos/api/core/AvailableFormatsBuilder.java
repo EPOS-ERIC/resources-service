@@ -139,14 +139,6 @@ public class AvailableFormatsBuilder {
     public static List<AvailableFormat> build(FormatInput input) {
         List<AvailableFormat> formats = new ArrayList<>(8);
 
-        LOGGER.info("[build] START instanceId={}", input.getInstanceId());
-        LOGGER.info("[build] downloadUrls={}, hasAccessService={}, originalFormat={}", 
-                input.getDownloadUrls() != null ? String.join(",", input.getDownloadUrls()) : "null",
-                input.hasAccessService(), input.getOriginalFormat());
-        LOGGER.info("[build] operationTemplate={}", input.getOperationTemplate());
-        LOGGER.info("[build] operationReturns={}", 
-                input.getOperationReturns() != null ? String.join(",", input.getOperationReturns()) : "null");
-
         // DOWNLOADABLE FILE case - no access service and has download URLs
         // Matches JPA: distribution.getDownloadURL() != null && distribution.getAccessService() == null
         if (input.downloadUrls != null && input.downloadUrls.length > 0 
@@ -154,48 +146,32 @@ public class AvailableFormatsBuilder {
             String format = extractFormatFromUri(input.originalFormat);
             formats.add(createFormat(format, format, String.join(",", input.downloadUrls),
                     format.toUpperCase(), AvailableFormatType.ORIGINAL));
-            LOGGER.info("[build] DOWNLOADABLE FILE - returning early with format: {}", format);
             return formats;
         }
 
         // Process plugins FIRST, regardless of template existence
         // Matches JPA: plugins are processed before mapping check (lines 143-148 of AvailableFormatsGeneration)
-        int sizeBeforePlugins = formats.size();
         addPluginFormats(input.instanceId, formats);
-        LOGGER.info("[build] After addPluginFormats: added {} formats, total={}", 
-                formats.size() - sizeBeforePlugins, formats.size());
 
         // Add encoding-based formats from operation mappings ONLY if template exists
         // Matches JPA: operation.getMapping() != null && ... && operation.getTemplate() != null (line 151)
         if (input.operationTemplate != null && !input.operationTemplate.isEmpty()) {
             if (!isEmptyJson(input.availableFormatsJson)) {
-                int sizeBeforeEncoding = formats.size();
                 addEncodingFormats(input.instanceId, input.availableFormatsJson, 
                         input.operationTemplate, input.serviceValues, formats);
-                LOGGER.info("[build] After addEncodingFormats: added {} formats, total={}", 
-                        formats.size() - sizeBeforeEncoding, formats.size());
-            } else {
-                LOGGER.info("[build] Skipping encoding formats - availableFormatsJson is empty");
             }
-        } else {
-            LOGGER.info("[build] Skipping encoding formats - operationTemplate is null/empty");
         }
 
         // Fallback to operation returns if no formats found yet (regardless of template)
         // Matches JPA: operation.getReturns() != null && formats.isEmpty() (line 167)
-        LOGGER.info("[build] Checking operationReturns fallback: formats.isEmpty()={}, operationReturns!=null={}", 
-                formats.isEmpty(), input.operationReturns != null);
         if (formats.isEmpty() && input.operationReturns != null) {
-            LOGGER.info("[build] Adding operationReturns as fallback (formats was empty)");
             for (String ret : input.operationReturns) {
                 if (ret != null && !ret.isEmpty()) {
                     addReturnFormat(input.instanceId, ret, formats);
-                    LOGGER.info("[build] Added return format: {}", ret);
                 }
             }
         }
 
-        LOGGER.info("[build] END instanceId={}, total formats={}", input.getInstanceId(), formats.size());
         return formats;
     }
 
@@ -225,53 +201,33 @@ public class AvailableFormatsBuilder {
 
         List<AvailableFormat> formats = new ArrayList<>(8);
 
-        LOGGER.info("[buildFromSearchData] START instanceId={}", instanceId);
-        LOGGER.info("[buildFromSearchData] downloadUrls={}, originalFormat={}, hasAccessService={}", 
-                downloadUrls != null ? String.join(",", downloadUrls) : "null", originalFormat, hasAccessService);
-        LOGGER.info("[buildFromSearchData] operationReturns={}", 
-                operationReturns != null ? String.join(",", operationReturns) : "null");
-        LOGGER.info("[buildFromSearchData] availableFormatsJson={}", availableFormatsJson);
-        LOGGER.info("[buildFromSearchData] serviceValues={}", serviceValues);
-
         // DOWNLOADABLE FILE case - no access service and has download URLs
         // Matches JPA: distribution.getDownloadURL() != null && distribution.getAccessService() == null
         if (downloadUrls != null && downloadUrls.length > 0 && !hasAccessService && originalFormat != null) {
             String format = extractFormatFromUri(originalFormat);
             formats.add(createFormat(format, format, String.join(",", downloadUrls),
                     format.toUpperCase(), AvailableFormatType.ORIGINAL));
-            LOGGER.info("[buildFromSearchData] DOWNLOADABLE FILE - returning early with format: {}", format);
             return formats;
         }
 
         // WEBSERVICE case - process plugins, mappings, and potentially returns
 
         // Add plugin-based converted formats
-        int sizeBeforePlugins = formats.size();
         addPluginFormats(instanceId, formats);
-        LOGGER.info("[buildFromSearchData] After addPluginFormats: added {} formats, total={}", 
-                formats.size() - sizeBeforePlugins, formats.size());
 
         // Add encoding-based formats from operation mappings
-        int sizeBeforeEncoding = formats.size();
         addEncodingFormatsFromSearchJson(instanceId, availableFormatsJson, serviceValues, formats);
-        LOGGER.info("[buildFromSearchData] After addEncodingFormatsFromSearchJson: added {} formats, total={}", 
-                formats.size() - sizeBeforeEncoding, formats.size());
 
         // Fallback to operation returns ONLY if no formats found yet (from plugins or encoding)
         // Matches JPA: operation.getReturns() != null && formats.isEmpty() (line 167)
-        LOGGER.info("[buildFromSearchData] Checking operationReturns fallback: formats.isEmpty()={}, operationReturns!=null={}", 
-                formats.isEmpty(), operationReturns != null);
         if (formats.isEmpty() && operationReturns != null) {
-            LOGGER.info("[buildFromSearchData] Adding operationReturns as fallback (formats was empty)");
             for (String ret : operationReturns) {
                 if (ret != null) {
                     addReturnFormat(instanceId, ret, formats);
-                    LOGGER.info("[buildFromSearchData] Added return format: {}", ret);
                 }
             }
         }
 
-        LOGGER.info("[buildFromSearchData] END instanceId={}, total formats={}", instanceId, formats.size());
         return formats;
     }
 
@@ -282,17 +238,17 @@ public class AvailableFormatsBuilder {
         try {
             Map<String, List<Plugin.Relations>> plugins = DatabaseConnections.getInstance().getPlugins();
             if (plugins == null) {
-                LOGGER.info("[addPluginFormats] Plugins map is null for instance {}", instanceId);
+                LOGGER.debug("Plugins map is null for instance {}", instanceId);
                 return;
             }
             
             List<Plugin.Relations> relations = plugins.get(instanceId);
             if (relations == null || relations.isEmpty()) {
-                LOGGER.info("[addPluginFormats] No plugin relations found for instance {}", instanceId);
+                LOGGER.debug("No plugin relations found for instance {}", instanceId);
                 return;
             }
 
-            LOGGER.info("[addPluginFormats] Found {} plugin relations for instance {}", relations.size(), instanceId);
+            LOGGER.debug("Found {} plugin relations for instance {}", relations.size(), instanceId);
             
             for (Plugin.Relations relation : relations) {
                 String outputFormat = relation.getOutputFormat();
@@ -300,7 +256,7 @@ public class AvailableFormatsBuilder {
                 String pluginId = relation.getPluginId();
 
                 if (outputFormat == null || inputFormat == null || pluginId == null) {
-                    LOGGER.info("[addPluginFormats] Skipping plugin relation with null values: output={}, input={}, pluginId={}", 
+                    LOGGER.debug("Skipping plugin relation with null values: output={}, input={}, pluginId={}", 
                             outputFormat, inputFormat, pluginId);
                     continue;
                 }
@@ -315,17 +271,17 @@ public class AvailableFormatsBuilder {
                         || outputFormat.equals("application/epos.covjson")) {
                     label = "COVJSON";
                 } else {
-                    LOGGER.info("[addPluginFormats] Skipping plugin with unsupported output format: {}", outputFormat);
+                    LOGGER.debug("Skipping plugin with unsupported output format: {}", outputFormat);
                     continue;
                 }
 
-                LOGGER.info("[addPluginFormats] Adding converted format: pluginId={}, inputFormat={}, outputFormat={}, label={}", 
+                LOGGER.debug("Adding converted format: pluginId={}, inputFormat={}, outputFormat={}, label={}", 
                         pluginId, inputFormat, outputFormat, label);
                 formats.add(createConvertedFormat(inputFormat, pluginId, inputFormat, outputFormat,
                         buildHrefConverted(instanceId, outputFormat, inputFormat, pluginId), label));
             }
         } catch (Exception e) {
-            LOGGER.warn("[addPluginFormats] Failed to process plugins for instance {}: {}", instanceId, e.getMessage(), e);
+            LOGGER.warn("Failed to process plugins for instance {}: {}", instanceId, e.getMessage(), e);
         }
     }
 
@@ -385,31 +341,21 @@ public class AvailableFormatsBuilder {
      */
     private static void addEncodingFormatsFromSearchJson(String instanceId, String availableFormatsJson,
                                                           String serviceValues, List<AvailableFormat> formats) {
-        LOGGER.info("[addEncodingFormatsFromSearchJson] START instanceId={}", instanceId);
-        LOGGER.info("[addEncodingFormatsFromSearchJson] availableFormatsJson={}", availableFormatsJson);
-        
         if (isEmptyJson(availableFormatsJson)) {
-            LOGGER.info("[addEncodingFormatsFromSearchJson] Empty JSON, returning early");
             return;
         }
 
         try {
             JsonNode arrayNode = OBJECT_MAPPER.readTree(availableFormatsJson);
-            LOGGER.info("[addEncodingFormatsFromSearchJson] Parsed {} format entries", arrayNode.size());
-            
             for (JsonNode formatNode : arrayNode) {
                 String paramValue = getTextOrNull(formatNode, "format");
                 if (paramValue == null) {
-                    LOGGER.info("[addEncodingFormatsFromSearchJson] Skipping entry with null format");
                     continue;
                 }
 
                 String template = getTextOrNull(formatNode, "template");
                 String variable = getTextOrNull(formatNode, "variable");
                 String defaultValue = getTextOrNull(formatNode, "default_value");
-
-                LOGGER.info("[addEncodingFormatsFromSearchJson] Processing: paramValue={}, template={}, variable={}, defaultValue={}", 
-                        paramValue, template, variable, defaultValue);
 
                 String templateLower = template != null ? template.toLowerCase() : "";
                 String variableLower = variable != null ? variable.toLowerCase() : "";
@@ -420,33 +366,23 @@ public class AvailableFormatsBuilder {
                 boolean isWMTS = detectServiceType(templateLower, variableLower, paramValue, defaultValueLower, serviceValues, "wmts");
                 boolean isWFS = detectServiceType(templateLower, variableLower, paramValue, defaultValueLower, serviceValues, "wfs");
 
-                LOGGER.info("[addEncodingFormatsFromSearchJson] Service detection: isWMS={}, isWMTS={}, isWFS={}", isWMS, isWMTS, isWFS);
-
                 if (paramValue.startsWith("image/")) {
                     if (isWMS) {
                         formats.add(createOgcFormat(instanceId, paramValue, "application/vnd.ogc.wms_xml", "WMS"));
-                        LOGGER.info("[addEncodingFormatsFromSearchJson] Added WMS format for image: {}", paramValue);
                     } else if (isWMTS) {
                         formats.add(createOgcFormat(instanceId, paramValue, "application/vnd.ogc.wmts_xml", "WMTS"));
-                        LOGGER.info("[addEncodingFormatsFromSearchJson] Added WMTS format for image: {}", paramValue);
-                    } else {
-                        LOGGER.info("[addEncodingFormatsFromSearchJson] Skipping image format (not WMS/WMTS): {}", paramValue);
                     }
                 } else if ("json".equals(paramValue) && isWFS) {
                     formats.add(createGeoJsonFormat(instanceId, paramValue, "json"));
-                    LOGGER.info("[addEncodingFormatsFromSearchJson] Added GeoJSON for WFS json: {}", paramValue);
                 } else if (paramValue.contains("geo%2Bjson") || GEOJSON_PATTERN.matcher(paramValue).matches()) {
                     formats.add(createGeoJsonFormat(instanceId, paramValue, paramValue));
-                    LOGGER.info("[addEncodingFormatsFromSearchJson] Added GeoJSON format: {}", paramValue);
                 } else {
                     formats.add(createFormat(paramValue, paramValue, buildHref(instanceId, paramValue),
                             paramValue.toUpperCase(), AvailableFormatType.ORIGINAL));
-                    LOGGER.info("[addEncodingFormatsFromSearchJson] Added generic format: {}", paramValue);
                 }
             }
-            LOGGER.info("[addEncodingFormatsFromSearchJson] END instanceId={}, formats.size={}", instanceId, formats.size());
         } catch (JsonProcessingException e) {
-            LOGGER.warn("[addEncodingFormatsFromSearchJson] Failed to parse encoding formats for {}: {}", instanceId, e.getMessage());
+            LOGGER.warn("Failed to parse encoding formats for {}: {}", instanceId, e.getMessage());
         }
     }
 
