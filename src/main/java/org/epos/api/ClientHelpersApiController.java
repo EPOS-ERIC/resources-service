@@ -90,7 +90,7 @@ public class ClientHelpersApiController extends ApiController implements ClientH
 		requestParams.put("id", id);
 		requestParams.put("extended", extended);
 
-		return standardRequest("DETAILS", requestParams, null);
+		return standardRequest("DETAILS", requestParams, getUserFromSession());
 	}
 
 	public ResponseEntity<SearchResponse> searchUsingGet(
