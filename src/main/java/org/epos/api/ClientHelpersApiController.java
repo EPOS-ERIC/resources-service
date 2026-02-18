@@ -337,7 +337,7 @@ public class ClientHelpersApiController extends ApiController implements ClientH
 			requestParameters.put("format", "json/plain");
 		}
 
-		return standardRequest("FACILITYDETAILS", requestParameters, null);
+		return standardRequest("FACILITYDETAILS", requestParameters, getUserFromSession());
 	}
 
 	@Override

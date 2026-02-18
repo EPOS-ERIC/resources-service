@@ -14,8 +14,11 @@ public class InterceptorConfiguration implements WebMvcConfigurer {
         registry.addInterceptor(new LogUserInInterceptor()).addPathPatterns(
                 List.of(
                         "/resources/search",
-						"/software/search",
-						"/facilities/search"
+                        "/resources/details/**",
+                        "/software/search",
+                        "/software/details/**",
+                        "/facilities/search",
+                        "/facilities/details/**"
                 )
         );
     }
