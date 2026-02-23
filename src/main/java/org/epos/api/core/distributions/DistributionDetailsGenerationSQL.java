@@ -363,7 +363,7 @@ public class DistributionDetailsGenerationSQL {
         ctx.sql.append("  COALESCE(dd.description, '') AS description, ");
         ctx.sql.append("  COALESCE(ddu.download_urls, '') AS download_urls, ");
         ctx.sql.append("  COALESCE(dau.access_urls, '') AS access_urls, ");
-        ctx.sql.append("  di.dataproduct_id, di.keywords, di.accrualperiodicity, di.qualityassurance, di.accessright");
+        ctx.sql.append("  di.dataproduct_id, di.keywords, di.accrualperiodicity, di.qualityassurance, di.accessright, ");
         ctx.sql.append("  COALESCE(CAST(dpi.identifiers AS text), '[]') AS dp_identifiers, ");
         ctx.sql.append("  COALESCE(dps.locations, '') AS dp_spatial, ");
         ctx.sql.append("  dpt.startdate AS dp_start_date, dpt.enddate AS dp_end_date, ");
