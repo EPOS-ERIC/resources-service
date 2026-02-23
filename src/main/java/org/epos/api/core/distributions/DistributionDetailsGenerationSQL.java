@@ -195,7 +195,7 @@ public class DistributionDetailsGenerationSQL {
         // DataProduct info
         ctx.sql.append("dataproduct_info AS ( ");
         ctx.sql.append("  SELECT ddp.distribution_instance_id, dp.instance_id AS dataproduct_id, ");
-        ctx.sql.append("         dp.keywords, dp.accrualperiodicity, dp.qualityassurance ");
+        ctx.sql.append("         dp.keywords, dp.accrualperiodicity, dp.qualityassurance, dp.accessright ");
         ctx.sql.append("  FROM metadata_catalogue.distribution_dataproduct ddp ");
         ctx.sql.append("  JOIN metadata_catalogue.dataproduct dp ON ddp.dataproduct_instance_id = dp.instance_id ");
         ctx.sql.append("  WHERE ddp.distribution_instance_id = ?1 ");
@@ -363,7 +363,7 @@ public class DistributionDetailsGenerationSQL {
         ctx.sql.append("  COALESCE(dd.description, '') AS description, ");
         ctx.sql.append("  COALESCE(ddu.download_urls, '') AS download_urls, ");
         ctx.sql.append("  COALESCE(dau.access_urls, '') AS access_urls, ");
-        ctx.sql.append("  di.dataproduct_id, di.keywords, di.accrualperiodicity, di.qualityassurance, ");
+        ctx.sql.append("  di.dataproduct_id, di.keywords, di.accrualperiodicity, di.qualityassurance, di.accessright");
         ctx.sql.append("  COALESCE(CAST(dpi.identifiers AS text), '[]') AS dp_identifiers, ");
         ctx.sql.append("  COALESCE(dps.locations, '') AS dp_spatial, ");
         ctx.sql.append("  dpt.startdate AS dp_start_date, dpt.enddate AS dp_end_date, ");
@@ -429,6 +429,7 @@ public class DistributionDetailsGenerationSQL {
         String keywords = (String) row[i++];
         String accrualPeriodicity = (String) row[i++];
         String qualityAssurance = (String) row[i++];
+        String accessRight = (String) row[i++];
         String dpIdentifiersJson = (String) row[i++];
         String dpSpatial = (String) row[i++];
         Timestamp dpStartDate = (Timestamp) row[i++];
@@ -485,6 +486,7 @@ public class DistributionDetailsGenerationSQL {
 
         distribution.setFrequencyUpdate(accrualPeriodicity);
         distribution.setQualityAssurance(qualityAssurance);
+        distribution.setAccessRight(accessRight);
 
         distribution.setHref(EnvironmentVariables.API_HOST + API_PATH_DETAILS + instanceId);
         distribution.setHrefExtended(EnvironmentVariables.API_HOST + API_PATH_DETAILS + instanceId + "?extended=true");

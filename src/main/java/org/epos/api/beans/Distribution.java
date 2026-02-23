@@ -41,6 +41,7 @@ public class Distribution implements Serializable {
 	private TemporalCoverage temporalCoverage;
 	private List<String> scienceDomain;
 	private String qualityAssurance;
+	private String accessRight;
 	private List<AvailableFormat> availableFormats;
 	private List<AvailableContactPoints> availableContactPoints;
 	private StatusType versioningStatus;
@@ -447,6 +448,14 @@ public class Distribution implements Serializable {
 		this.qualityAssurance = qualityAssurance;
 	}
 
+	public String getAccessRight() {
+		return accessRight;
+	}
+
+	public void setAccessRight(String accessRight) {
+		this.accessRight = accessRight;
+	}
+
 	public StatusType getVersioningStatus() {
 		return versioningStatus;
 	}
@@ -488,6 +497,7 @@ public class Distribution implements Serializable {
 				temporalCoverage,
 				scienceDomain,
 				qualityAssurance,
+				accessRight,
 				availableFormats,
 				availableContactPoints,
 				versioningStatus,
@@ -533,6 +543,7 @@ public class Distribution implements Serializable {
 				Objects.equals(temporalCoverage, that.temporalCoverage) &&
 				Objects.equals(scienceDomain, that.scienceDomain) &&
 				Objects.equals(qualityAssurance, that.qualityAssurance) &&
+				Objects.equals(accessRight, that.accessRight) &&
 				Objects.equals(availableFormats, that.availableFormats) &&
 				Objects.equals(availableContactPoints, that.availableContactPoints) &&
 				Objects.equals(versioningStatus, that.versioningStatus) &&
@@ -557,7 +568,7 @@ public class Distribution implements Serializable {
 				+ ", license=" + license + ", downloadURL=" + downloadURL + ", keywords=" + keywords + ", dataProvider="
 				+ dataProvider + ", frequencyUpdate=" + frequencyUpdate + ", internalID=" + internalID + ", DOI=" + DOI
 				+ ", spatial=" + spatial + ", temporalCoverage=" + temporalCoverage + ", scienceDomain=" + scienceDomain
-				+ ", hasQualityAnnotation=" + qualityAssurance + ", availableFormats=" + availableFormats
+				+ ", hasQualityAnnotation=" + qualityAssurance + ", accessRight=" + accessRight +", availableFormats=" + availableFormats
 				+ ", availableContactPoints=" + availableContactPoints + ", serviceName=" + serviceName
 				+ ", serviceDescription=" + serviceDescription + ", serviceProvider=" + serviceProvider
 				+ ", serviceSpatial=" + serviceSpatial + ", serviceTemporalCoverage=" + serviceTemporalCoverage
