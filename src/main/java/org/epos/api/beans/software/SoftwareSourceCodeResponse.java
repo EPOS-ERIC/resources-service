@@ -31,7 +31,7 @@ public class SoftwareSourceCodeResponse {
 	private List<String> citation;
 	private List<String> creator;
 	private String id;
-	private List<String> doi;
+	private List<String> DOI;
 	private List<String> identifiers;
 	private List<AvailableContactPoints> availableContactPoints;
     private List<AvailableFormat> availableFormats;
@@ -65,12 +65,12 @@ public class SoftwareSourceCodeResponse {
 		this.availableContactPoints = new ArrayList<>();
 	}
 
-	public List<String> getDoi() {
-		return doi;
+	public List<String> getDOI() {
+		return DOI;
 	}
 
-	public void setDoi(List<String> doi) {
-		this.doi = doi;
+	public void setDOI(List<String> DOI) {
+		this.DOI = DOI;
 	}
 
 	public List<String> getIdentifiers() {

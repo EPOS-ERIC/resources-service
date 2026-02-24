@@ -386,7 +386,7 @@ public class SoftwareApplicationGenerationSQL {
             LOGGER.warn("Failed to parse identifiers: {}", e.getMessage());
         }
 
-        response.setDoi(doi.isEmpty() ? null : doi);
+        response.setDOI(doi.isEmpty() ? null : doi);
         response.setIdentifiers(identifiers.isEmpty() ? null : identifiers);
     }
 
@@ -453,7 +453,7 @@ public class SoftwareApplicationGenerationSQL {
                 }
             }
 
-            response.setDoi(doi.isEmpty() ? null : doi);
+            response.setDOI(doi.isEmpty() ? null : doi);
             response.setIdentifiers(identifiers.isEmpty() ? null : identifiers);
 
         } catch (Exception e) {

@@ -480,10 +480,10 @@ public class SoftwareSearchGenerationSQL {
         if (row.length > 7 && row[7] != null) {
             String keywordsStr = (String) row[7];
             if (keywordsStr != null && !keywordsStr.isEmpty()) {
-                Arrays.stream(keywordsStr.split(",\t"))
-                        .map(String::toLowerCase)
+
+                Arrays.stream(keywordsStr.split(","))
                         .map(String::trim)
-                        .filter(k -> !k.isEmpty())
+                        .filter(s -> !s.isEmpty())
                         .forEach(keywords::add);
             }
         }

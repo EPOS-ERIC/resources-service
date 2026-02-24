@@ -249,7 +249,7 @@ public class SoftwareSourceCodeGenerationSQL {
                     }
                 }
 
-                response.setDoi(doiList.isEmpty() ? null : doiList);
+                response.setDOI(doiList.isEmpty() ? null : doiList);
                 response.setIdentifiers(ddssIdList.isEmpty() ? null : ddssIdList);
             } catch (JsonProcessingException e) {
                 LOGGER.warn("Failed to parse identifiers: {}", e.getMessage());

@@ -87,7 +87,7 @@ public class SoftwareApplicationGenerationJPA {
 				}
 			});
 		}
-		response.setDoi(doi.isEmpty() ? null : doi);
+		response.setDOI(doi.isEmpty() ? null : doi);
 		response.setIdentifiers(identifiers.isEmpty() ? null : identifiers);
 
 		// Contact Points

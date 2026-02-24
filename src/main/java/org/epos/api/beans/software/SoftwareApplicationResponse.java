@@ -33,7 +33,7 @@ public class SoftwareApplicationResponse {
 	private List<String> keywords;
 	private List<String> creator;
 	private String id;
-	private List<String> doi;
+	private List<String> DOI;
 	private List<String> identifiers;
 	private List<AvailableContactPoints> availableContactPoints;
     private List<AvailableFormat> availableFormats;
@@ -237,12 +237,12 @@ public class SoftwareApplicationResponse {
 		this.id = id;
 	}
 
-	public List<String> getDoi() {
-		return doi;
+	public List<String> getDOI() {
+		return DOI;
 	}
 
-	public void setDoi(List<String> doi) {
-		this.doi = doi;
+	public void setDOI(List<String> DOI) {
+		this.DOI = DOI;
 	}
 
 	public List<String> getIdentifiers() {
