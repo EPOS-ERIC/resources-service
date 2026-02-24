@@ -96,26 +96,28 @@ public class DataServiceProviderGenerationSQL {
 
         // Check which target orgs have NO memberOf (are top-level organizations)
         // Only top-level orgs should have related organizations listed
+        // An org is top-level if it does NOT appear as organization2 (child) in organization_memberof
         sql.append("top_level_orgs AS ( ");
         sql.append("  SELECT t.instance_id ");
         sql.append("  FROM target_orgs t ");
         sql.append("  WHERE NOT EXISTS ( ");
         sql.append("    SELECT 1 FROM metadata_catalogue.organization_memberof om ");
-        sql.append("    WHERE om.organization1_instance_id = t.instance_id ");
+        sql.append("    WHERE om.organization2_instance_id = t.instance_id ");
         sql.append("  ) ");
         sql.append("), ");
 
         // Get related organizations (organizations that are member_of target orgs)
-        // organization_memberof table: organization1_instance_id is the member, organization2_instance_id is the parent
+        // organization_memberof table: organization1_instance_id is the PARENT, organization2_instance_id is the CHILD/MEMBER
+        // To find children of a parent org: join where organization1_instance_id = parent's instance_id
         // Only include related orgs for top-level organizations (matching JPA behavior)
         sql.append("related_orgs AS ( ");
-        sql.append("  SELECT om.organization1_instance_id, t.instance_id AS parent_instance_id, ");
+        sql.append("  SELECT om.organization2_instance_id, t.instance_id AS parent_instance_id, ");
         sql.append("         o.legalname AS related_legalname, o.url AS related_url, ");
         sql.append("         o.instance_id AS related_instance_id, a.country AS related_country ");
         sql.append("  FROM target_orgs t ");
         sql.append("  JOIN top_level_orgs tlo ON t.instance_id = tlo.instance_id ");
-        sql.append("  JOIN metadata_catalogue.organization_memberof om ON om.organization2_instance_id = t.instance_id ");
-        sql.append("  JOIN metadata_catalogue.organization o ON om.organization1_instance_id = o.instance_id ");
+        sql.append("  JOIN metadata_catalogue.organization_memberof om ON om.organization1_instance_id = t.instance_id ");
+        sql.append("  JOIN metadata_catalogue.organization o ON om.organization2_instance_id = o.instance_id ");
         sql.append("  LEFT JOIN metadata_catalogue.address a ON o.address_id = a.instance_id ");
         sql.append("  WHERE o.legalname IS NOT NULL ");
         sql.append(") ");
