@@ -1,16 +1,14 @@
 package org.epos.api.beans.software;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 import org.epos.api.beans.AvailableContactPoints;
 import org.epos.api.beans.AvailableFormat;
 import org.epos.api.facets.Node;
-import org.epos.eposdatamodel.LinkedEntity;
-import org.epos.eposdatamodel.SoftwareSourceCode;
 
-public class SoftwareSourceCodeResponse {
+public class SoftwareSourceCodeResponse implements Serializable {
 
 	private String name;
 	private String description;
@@ -36,30 +34,6 @@ public class SoftwareSourceCodeResponse {
 	private List<AvailableContactPoints> availableContactPoints;
     private List<AvailableFormat> availableFormats;
 	private Node categories;
-
-	public SoftwareSourceCodeResponse(SoftwareSourceCode softwareSourceCode) {
-		this.name = softwareSourceCode.getName();
-		this.description = softwareSourceCode.getDescription();
-		this.codeRepository = softwareSourceCode.getCodeRepository();
-		this.downloadURL = softwareSourceCode.getDownloadURL();
-		this.licenseURL = softwareSourceCode.getLicenseURL();
-		this.mainEntityOfPage = softwareSourceCode.getMainEntityofPage();
-		this.softwareRequirements = softwareSourceCode.getSoftwareRequirements();
-		this.programmingLanguage = softwareSourceCode.getProgrammingLanguage();
-		this.runtimePlatform = softwareSourceCode.getRuntimePlatform();
-		this.softwareVersion = softwareSourceCode.getSoftwareVersion();
-		this.softwareStatus = softwareSourceCode.getSoftwareStatus();
-		this.spatial = softwareSourceCode.getSpatial();
-		this.temporal = softwareSourceCode.getTemporal();
-		// Keywords will be set by the generation class
-		this.keywords = null;
-		this.citation = softwareSourceCode.getCitation();
-		this.creator = createCreatorUids(softwareSourceCode.getCreator());
-		this.size = softwareSourceCode.getSize();
-		this.timeRequired = softwareSourceCode.getTimeRequired();
-		this.id = softwareSourceCode.getInstanceId();
-		this.availableContactPoints = new ArrayList<>();
-	}
 
 	public SoftwareSourceCodeResponse() {
 		this.availableContactPoints = new ArrayList<>();
@@ -257,14 +231,4 @@ public class SoftwareSourceCodeResponse {
         this.availableFormats = availableFormats;
     }
 
-	private static List<String> createCreatorUids(List<LinkedEntity> creators) {
-		if (creators == null) {
-			return null;
-		}
-		List<String> creatorUids = creators.stream()
-				.map(LinkedEntity::getUid)
-				.filter(Objects::nonNull)
-				.toList();
-		return creatorUids.isEmpty() ? null : creatorUids;
-	}
 }

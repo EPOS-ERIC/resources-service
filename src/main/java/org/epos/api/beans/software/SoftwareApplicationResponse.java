@@ -1,16 +1,14 @@
 package org.epos.api.beans.software;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 import org.epos.api.beans.AvailableContactPoints;
 import org.epos.api.beans.AvailableFormat;
 import org.epos.api.facets.Node;
-import org.epos.eposdatamodel.LinkedEntity;
-import org.epos.eposdatamodel.SoftwareApplication;
 
-public class SoftwareApplicationResponse {
+public class SoftwareApplicationResponse implements Serializable {
 
 	private String name;
 	private String description;
@@ -38,32 +36,6 @@ public class SoftwareApplicationResponse {
 	private List<AvailableContactPoints> availableContactPoints;
     private List<AvailableFormat> availableFormats;
 	private Node categories;
-
-	public SoftwareApplicationResponse(SoftwareApplication softwareApplication) {
-		this.name = softwareApplication.getName();
-		this.description = softwareApplication.getDescription();
-		this.downloadURL = softwareApplication.getDownloadURL();
-		this.installURL = softwareApplication.getInstallURL();
-		this.licenseURL = softwareApplication.getLicenseURL();
-		this.mainEntityOfPage = softwareApplication.getMainEntityOfPage();
-		this.softwareRequirements = softwareApplication.getRequirements();
-		this.softwareVersion = softwareApplication.getSoftwareVersion();
-		this.softwareStatus = softwareApplication.getSoftwareStatus();
-		this.spatial = softwareApplication.getSpatial();
-		this.temporal = softwareApplication.getTemporal();
-		this.fileSize = softwareApplication.getFileSize();
-		this.timeRequired = softwareApplication.getTimeRequired();
-		this.processorRequirements = softwareApplication.getProcessorRequirements();
-		this.memoryRequirements = softwareApplication.getMemoryrequirements();
-		this.storageRequirements = softwareApplication.getStorageRequirements();
-		this.citation = softwareApplication.getCitation();
-		this.operatingSystem = softwareApplication.getOperatingSystem();
-		// Keywords will be set by the generation class
-		this.keywords = null;
-		this.creator = createCreatorUids(softwareApplication.getCreator());
-		this.id = softwareApplication.getInstanceId();
-		this.availableContactPoints = new ArrayList<>();
-	}
 
 	public SoftwareApplicationResponse() {
 		this.availableContactPoints = new ArrayList<>();
@@ -277,14 +249,4 @@ public class SoftwareApplicationResponse {
         this.availableFormats = availableFormats;
     }
 
-	private static List<String> createCreatorUids(List<LinkedEntity> creators) {
-		if (creators == null) {
-			return null;
-		}
-		List<String> creatorUids = creators.stream()
-				.map(LinkedEntity::getUid)
-				.filter(Objects::nonNull)
-				.toList();
-		return creatorUids.isEmpty() ? null : creatorUids;
-	}
 }
