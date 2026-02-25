@@ -41,7 +41,7 @@ public class Distribution implements Serializable {
 	private TemporalCoverage temporalCoverage;
 	private List<String> scienceDomain;
 	private String qualityAssurance;
-	private String accessRight;
+	private String accessRights;
 	private List<AvailableFormat> availableFormats;
 	private List<AvailableContactPoints> availableContactPoints;
 	private StatusType versioningStatus;
@@ -449,11 +449,11 @@ public class Distribution implements Serializable {
 	}
 
 	public String getAccessRight() {
-		return accessRight;
+		return accessRights;
 	}
 
-	public void setAccessRight(String accessRight) {
-		this.accessRight = accessRight;
+	public void setAccessRight(String accessRights) {
+		this.accessRights = accessRights;
 	}
 
 	public StatusType getVersioningStatus() {
@@ -497,7 +497,7 @@ public class Distribution implements Serializable {
 				temporalCoverage,
 				scienceDomain,
 				qualityAssurance,
-				accessRight,
+				accessRights,
 				availableFormats,
 				availableContactPoints,
 				versioningStatus,
@@ -543,7 +543,7 @@ public class Distribution implements Serializable {
 				Objects.equals(temporalCoverage, that.temporalCoverage) &&
 				Objects.equals(scienceDomain, that.scienceDomain) &&
 				Objects.equals(qualityAssurance, that.qualityAssurance) &&
-				Objects.equals(accessRight, that.accessRight) &&
+				Objects.equals(accessRights, that.accessRights) &&
 				Objects.equals(availableFormats, that.availableFormats) &&
 				Objects.equals(availableContactPoints, that.availableContactPoints) &&
 				Objects.equals(versioningStatus, that.versioningStatus) &&
@@ -568,7 +568,7 @@ public class Distribution implements Serializable {
 				+ ", license=" + license + ", downloadURL=" + downloadURL + ", keywords=" + keywords + ", dataProvider="
 				+ dataProvider + ", frequencyUpdate=" + frequencyUpdate + ", internalID=" + internalID + ", DOI=" + DOI
 				+ ", spatial=" + spatial + ", temporalCoverage=" + temporalCoverage + ", scienceDomain=" + scienceDomain
-				+ ", hasQualityAnnotation=" + qualityAssurance + ", accessRight=" + accessRight +", availableFormats=" + availableFormats
+				+ ", hasQualityAnnotation=" + qualityAssurance + ", accessRights=" + accessRights +", availableFormats=" + availableFormats
 				+ ", availableContactPoints=" + availableContactPoints + ", serviceName=" + serviceName
 				+ ", serviceDescription=" + serviceDescription + ", serviceProvider=" + serviceProvider
 				+ ", serviceSpatial=" + serviceSpatial + ", serviceTemporalCoverage=" + serviceTemporalCoverage
