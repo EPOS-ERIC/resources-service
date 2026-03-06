@@ -15,6 +15,7 @@ import jakarta.persistence.Query;
 import org.epos.api.beans.AvailableContactPoints;
 import org.epos.api.beans.AvailableFormat;
 import org.epos.api.beans.DiscoveryItem;
+import org.epos.api.beans.software.SoftwareCreator;
 import org.epos.api.beans.software.SoftwareSourceCodeResponse;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.enums.AvailableFormatType;
@@ -129,14 +130,20 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("  GROUP BY se.softwaresourcecode_instance_id ");
         sql.append("), ");
 
-        // CTE for creator UIDs (creators can be persons or organizations)
+        // CTE for creators (organizations only)
         sql.append("software_creators AS ( ");
         sql.append("  SELECT sc.softwaresourcecode_instance_id AS instance_id, ");
-        sql.append("         JSONB_AGG(COALESCE(p.uid, o.uid)) FILTER (WHERE COALESCE(p.uid, o.uid) IS NOT NULL) AS creator_uids ");
+        sql.append("         JSONB_AGG(JSONB_STRIP_NULLS(JSONB_BUILD_OBJECT( ");
+        sql.append("           'uid', o.uid, ");
+        sql.append("           'name', o.legalname, ");
+        sql.append("           'country', oa.country, ");
+        sql.append("           'url', o.url, ");
+        sql.append("           'instanceid', o.instance_id ");
+        sql.append("         ))) FILTER (WHERE COALESCE(o.uid, o.instance_id) IS NOT NULL) AS creator_details ");
         sql.append("  FROM metadata_catalogue.softwaresourcecode_creator sc ");
-        sql.append("  LEFT JOIN metadata_catalogue.person p ON sc.entity_instance_id = p.instance_id AND sc.resource_entity = 'PERSON' ");
-        sql.append("  LEFT JOIN metadata_catalogue.organization o ON sc.entity_instance_id = o.instance_id AND sc.resource_entity = 'ORGANIZATION' ");
-        sql.append("  WHERE sc.softwaresourcecode_instance_id = ?1 ");
+        sql.append("  JOIN metadata_catalogue.organization o ON sc.entity_instance_id = o.instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.address oa ON o.address_id = oa.instance_id ");
+        sql.append("  WHERE sc.softwaresourcecode_instance_id = ?1 AND sc.resource_entity = 'ORGANIZATION' ");
         sql.append("  GROUP BY sc.softwaresourcecode_instance_id ");
         sql.append(") ");
 
@@ -152,7 +159,7 @@ public class SoftwareSourceCodeGenerationSQL {
         sql.append("  COALESCE(CAST(scat.categories AS text), '[]') AS categories, ");
         sql.append("  COALESCE(CAST(se.programming_languages AS text), '[]') AS programming_languages, ");
         sql.append("  COALESCE(CAST(se.citations AS text), '[]') AS citations, ");
-        sql.append("  COALESCE(CAST(scr.creator_uids AS text), '[]') AS creator_uids ");
+        sql.append("  COALESCE(CAST(scr.creator_details AS text), '[]') AS creator_details ");
         sql.append("FROM software_base sb ");
         sql.append("LEFT JOIN software_identifiers si ON sb.instance_id = si.instance_id ");
         sql.append("LEFT JOIN software_contacts sc ON sb.instance_id = sc.instance_id ");
@@ -199,7 +206,7 @@ public class SoftwareSourceCodeGenerationSQL {
         String categoriesJson = (String) row[i++];
         String programmingLanguagesJson = (String) row[i++];
         String citationsJson = (String) row[i++];
-        String creatorUidsJson = (String) row[i++];
+        String creatorDetailsJson = (String) row[i++];
 
         SoftwareSourceCodeResponse response = new SoftwareSourceCodeResponse();
 
@@ -301,19 +308,27 @@ public class SoftwareSourceCodeGenerationSQL {
             }
         }
 
-        // Creator UIDs
-        if (!isEmptyJson(creatorUidsJson)) {
+        // Creator details
+        if (!isEmptyJson(creatorDetailsJson)) {
             try {
-                JsonNode arrayNode = OBJECT_MAPPER.readTree(creatorUidsJson);
-                List<String> creators = new ArrayList<>();
+                JsonNode arrayNode = OBJECT_MAPPER.readTree(creatorDetailsJson);
+                List<SoftwareCreator> creators = new ArrayList<>();
                 for (JsonNode node : arrayNode) {
                     if (!node.isNull()) {
-                        creators.add(node.asText());
+                        SoftwareCreator creator = new SoftwareCreator();
+                        creator.setUid(getTextOrNull(node, "uid"));
+                        creator.setName(getTextOrNull(node, "name"));
+                        creator.setCountry(getTextOrNull(node, "country"));
+                        creator.setUrl(getTextOrNull(node, "url"));
+                        creator.setInstanceid(getTextOrNull(node, "instanceid"));
+                        if (creator.getUid() != null || creator.getInstanceid() != null) {
+                            creators.add(creator);
+                        }
                     }
                 }
                 response.setCreator(creators.isEmpty() ? null : creators);
             } catch (JsonProcessingException e) {
-                LOGGER.warn("Failed to parse creator UIDs: {}", e.getMessage());
+                LOGGER.warn("Failed to parse creator details: {}", e.getMessage());
             }
         }
 
@@ -360,6 +375,14 @@ public class SoftwareSourceCodeGenerationSQL {
 
     private static String nullIfEmpty(String value) {
         return (value == null || value.trim().isEmpty()) ? null : value;
+    }
+
+    private static String getTextOrNull(JsonNode node, String fieldName) {
+        JsonNode field = node.get(fieldName);
+        if (field == null || field.isNull()) {
+            return null;
+        }
+        return field.asText(null);
     }
 
     private static List<AvailableFormat> createFormatsForSourceCode(String downloadUrl, String codeRepository) {

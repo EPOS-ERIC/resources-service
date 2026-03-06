@@ -12,15 +12,18 @@ import org.apache.logging.log4j.Logger;
 import org.epos.api.beans.AvailableContactPoints;
 import org.epos.api.beans.AvailableFormat;
 import org.epos.api.beans.DiscoveryItem;
+import org.epos.api.beans.software.SoftwareCreator;
 import org.epos.api.beans.software.SoftwareSourceCodeResponse;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.enums.ProviderType;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
+import org.epos.eposdatamodel.Address;
 import org.epos.eposdatamodel.Category;
 import org.epos.eposdatamodel.Identifier;
 import org.epos.eposdatamodel.LinkedEntity;
+import org.epos.eposdatamodel.Organization;
 import org.epos.eposdatamodel.SoftwareSourceCode;
 
 import commonapis.LinkedEntityAPI;
@@ -59,7 +62,7 @@ public class SoftwareSourceCodeGenerationJPA {
 			response.setKeywords(null);
 		}
 		response.setCitation(softwareSourceCode.getCitation());
-		response.setCreator(createCreatorUids(softwareSourceCode.getCreator()));
+		response.setCreator(createCreators(softwareSourceCode.getCreator()));
 		response.setSize(softwareSourceCode.getSize());
 		response.setTimeRequired(softwareSourceCode.getTimeRequired());
 		response.setId(softwareSourceCode.getInstanceId());
@@ -129,15 +132,64 @@ public class SoftwareSourceCodeGenerationJPA {
 		return response;
 	}
 
-	private static List<String> createCreatorUids(List<LinkedEntity> creators) {
+	private static List<SoftwareCreator> createCreators(List<LinkedEntity> creators) {
 		if (creators == null) {
 			return null;
 		}
-		List<String> creatorUids = creators.stream()
-				.map(LinkedEntity::getUid)
+		List<SoftwareCreator> softwareCreators = creators.stream()
+				.map(SoftwareSourceCodeGenerationJPA::toSoftwareCreator)
 				.filter(Objects::nonNull)
 				.toList();
-		return creatorUids.isEmpty() ? null : creatorUids;
+		return softwareCreators.isEmpty() ? null : softwareCreators;
+	}
+
+	private static SoftwareCreator toSoftwareCreator(LinkedEntity linkedEntity) {
+		if (linkedEntity == null) {
+			return null;
+		}
+
+		Object entity = LinkedEntityAPI.retrieveFromLinkedEntity(linkedEntity);
+		if (entity instanceof Organization organization) {
+			SoftwareCreator creator = new SoftwareCreator();
+			creator.setUid(organization.getUid());
+			creator.setInstanceid(organization.getInstanceId());
+			creator.setName(firstNonEmpty(organization.getLegalName()));
+			creator.setUrl(organization.getURL());
+			creator.setCountry(getCountryFromAddress(organization.getAddress()));
+			return hasCreatorIdentity(creator) ? creator : null;
+		}
+
+		String creatorType = entity == null ? "null" : entity.getClass().getName();
+		logger.warn("unsupported creator type: {}", creatorType);
+		return null;
+	}
+
+	private static boolean hasCreatorIdentity(SoftwareCreator creator) {
+		return creator.getUid() != null || creator.getInstanceid() != null;
+	}
+
+	private static String firstNonEmpty(List<String> values) {
+		if (values == null) {
+			return null;
+		}
+		return values.stream()
+				.filter(Objects::nonNull)
+				.map(String::trim)
+				.filter(value -> !value.isEmpty())
+				.findFirst()
+				.orElse(null);
+	}
+
+	private static String getCountryFromAddress(LinkedEntity addressLinkedEntity) {
+		if (addressLinkedEntity == null) {
+			return null;
+		}
+
+		Object addressObject = LinkedEntityAPI.retrieveFromLinkedEntity(addressLinkedEntity);
+		if (addressObject instanceof Address address) {
+			return address.getCountry();
+		}
+		return null;
 	}
 
 

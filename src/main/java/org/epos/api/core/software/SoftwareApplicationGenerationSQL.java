@@ -15,6 +15,7 @@ import jakarta.persistence.Query;
 import org.epos.api.beans.AvailableContactPoints;
 import org.epos.api.beans.AvailableFormat;
 import org.epos.api.beans.DiscoveryItem;
+import org.epos.api.beans.software.SoftwareCreator;
 import org.epos.api.beans.software.SoftwareApplicationResponse;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.enums.AvailableFormatType;
@@ -107,7 +108,7 @@ public class SoftwareApplicationGenerationSQL {
         response.setStorageRequirements(softwareApplication.getStorageRequirements());
         response.setCitation(softwareApplication.getCitation());
         response.setOperatingSystem(softwareApplication.getOperatingSystem());
-        response.setCreator(createCreatorUids(softwareApplication.getCreator()));
+        response.setCreator(createCreators(softwareApplication.getCreator()));
         response.setAvailableFormats(createFormatsForApplication(
                 softwareApplication.getDownloadURL(),
                 softwareApplication.getMainEntityOfPage()
@@ -200,14 +201,21 @@ public class SoftwareApplicationGenerationSQL {
         sql.append("  GROUP BY sb.instance_id ");
         sql.append("), ");
 
-        // Creators (can be persons or organizations)
+        // Creators (organizations only)
         sql.append("software_creators AS ( ");
         sql.append("  SELECT sb.instance_id, ");
-        sql.append("         JSONB_AGG(COALESCE(p.uid, o.uid)) FILTER (WHERE COALESCE(p.uid, o.uid) IS NOT NULL) AS creator_uids ");
+        sql.append("         JSONB_AGG(JSONB_STRIP_NULLS(JSONB_BUILD_OBJECT( ");
+        sql.append("           'uid', o.uid, ");
+        sql.append("           'name', o.legalname, ");
+        sql.append("           'country', oa.country, ");
+        sql.append("           'url', o.url, ");
+        sql.append("           'instanceid', o.instance_id ");
+        sql.append("         ))) FILTER (WHERE COALESCE(o.uid, o.instance_id) IS NOT NULL) AS creator_details ");
         sql.append("  FROM software_base sb ");
         sql.append("  JOIN metadata_catalogue.softwareapplication_creator sac ON sb.instance_id = sac.softwareapplication_instance_id ");
-        sql.append("  LEFT JOIN metadata_catalogue.person p ON sac.entity_instance_id = p.instance_id AND sac.resource_entity = 'PERSON' ");
-        sql.append("  LEFT JOIN metadata_catalogue.organization o ON sac.entity_instance_id = o.instance_id AND sac.resource_entity = 'ORGANIZATION' ");
+        sql.append("  JOIN metadata_catalogue.organization o ON sac.entity_instance_id = o.instance_id ");
+        sql.append("  LEFT JOIN metadata_catalogue.address oa ON o.address_id = oa.instance_id ");
+        sql.append("  WHERE sac.resource_entity = 'ORGANIZATION' ");
         sql.append("  GROUP BY sb.instance_id ");
         sql.append(") ");
 
@@ -224,7 +232,7 @@ public class SoftwareApplicationGenerationSQL {
         sql.append("  COALESCE(CAST(scat.categories AS text), '[]') AS categories, ");
         sql.append("  se.citation, ");
         sql.append("  COALESCE(CAST(TO_JSON(se.operating_systems) AS text), '[]') AS operating_systems, ");
-        sql.append("  COALESCE(CAST(scr.creator_uids AS text), '[]') AS creator_uids ");
+        sql.append("  COALESCE(CAST(scr.creator_details AS text), '[]') AS creator_details ");
         sql.append("FROM software_base sb ");
         sql.append("LEFT JOIN software_identifiers si ON sb.instance_id = si.instance_id ");
         sql.append("LEFT JOIN software_contacts sc ON sb.instance_id = sc.instance_id ");
@@ -273,7 +281,7 @@ public class SoftwareApplicationGenerationSQL {
         String categoriesJson = (String) row[i++];
         String citation = (String) row[i++];
         String operatingSystemsJson = (String) row[i++];
-        String creatorUidsJson = (String) row[i++];
+        String creatorDetailsJson = (String) row[i++];
 
         SoftwareApplicationResponse response = new SoftwareApplicationResponse();
 
@@ -314,19 +322,27 @@ public class SoftwareApplicationGenerationSQL {
             }
         }
 
-        // Creator UIDs
-        if (!isEmptyJson(creatorUidsJson)) {
+        // Creator details
+        if (!isEmptyJson(creatorDetailsJson)) {
             try {
-                JsonNode arrayNode = OBJECT_MAPPER.readTree(creatorUidsJson);
-                List<String> creators = new ArrayList<>();
+                JsonNode arrayNode = OBJECT_MAPPER.readTree(creatorDetailsJson);
+                List<SoftwareCreator> creators = new ArrayList<>();
                 for (JsonNode node : arrayNode) {
                     if (!node.isNull()) {
-                        creators.add(node.asText());
+                        SoftwareCreator creator = new SoftwareCreator();
+                        creator.setUid(getTextOrNull(node, "uid"));
+                        creator.setName(getTextOrNull(node, "name"));
+                        creator.setCountry(getTextOrNull(node, "country"));
+                        creator.setUrl(getTextOrNull(node, "url"));
+                        creator.setInstanceid(getTextOrNull(node, "instanceid"));
+                        if (creator.getUid() != null || creator.getInstanceid() != null) {
+                            creators.add(creator);
+                        }
                     }
                 }
                 response.setCreator(creators.isEmpty() ? null : creators);
             } catch (JsonProcessingException e) {
-                LOGGER.warn("Failed to parse creator UIDs: {}", e.getMessage());
+                LOGGER.warn("Failed to parse creator details: {}", e.getMessage());
             }
         }
 
@@ -561,14 +577,20 @@ public class SoftwareApplicationGenerationSQL {
         return field.asText(null);
     }
 
-    private static List<String> createCreatorUids(List<org.epos.eposdatamodel.LinkedEntity> creators) {
+    private static List<SoftwareCreator> createCreators(List<org.epos.eposdatamodel.LinkedEntity> creators) {
         if (creators == null) {
             return null;
         }
-        List<String> creatorUids = creators.stream()
-                .map(org.epos.eposdatamodel.LinkedEntity::getUid)
+        List<SoftwareCreator> softwareCreators = creators.stream()
                 .filter(java.util.Objects::nonNull)
+                .map(linkedEntity -> {
+                    SoftwareCreator creator = new SoftwareCreator();
+                    creator.setUid(linkedEntity.getUid());
+                    creator.setInstanceid(linkedEntity.getInstanceId());
+                    return creator;
+                })
+                .filter(creator -> creator.getUid() != null || creator.getInstanceid() != null)
                 .collect(Collectors.toList());
-        return creatorUids.isEmpty() ? null : creatorUids;
+        return softwareCreators.isEmpty() ? null : softwareCreators;
     }
 }

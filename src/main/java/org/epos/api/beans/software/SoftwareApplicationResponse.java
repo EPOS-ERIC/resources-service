@@ -29,7 +29,7 @@ public class SoftwareApplicationResponse implements Serializable {
 	private List<String> citation;
 	private List<String> operatingSystem;
 	private List<String> keywords;
-	private List<String> creator;
+	private List<SoftwareCreator> creator;
 	private String id;
 	private List<String> DOI;
 	private List<String> identifiers;
@@ -193,11 +193,11 @@ public class SoftwareApplicationResponse implements Serializable {
 		this.keywords = keywords;
 	}
 
-	public List<String> getCreator() {
+	public List<SoftwareCreator> getCreator() {
 		return creator;
 	}
 
-	public void setCreator(List<String> creator) {
+	public void setCreator(List<SoftwareCreator> creator) {
 		this.creator = creator;
 	}
 

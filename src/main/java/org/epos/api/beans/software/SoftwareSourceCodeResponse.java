@@ -27,7 +27,7 @@ public class SoftwareSourceCodeResponse implements Serializable {
 	private List<String> programmingLanguage;
 	private List<String> keywords;
 	private List<String> citation;
-	private List<String> creator;
+	private List<SoftwareCreator> creator;
 	private String id;
 	private List<String> DOI;
 	private List<String> identifiers;
@@ -191,11 +191,11 @@ public class SoftwareSourceCodeResponse implements Serializable {
 		this.citation = citation;
 	}
 
-	public List<String> getCreator() {
+	public List<SoftwareCreator> getCreator() {
 		return creator;
 	}
 
-	public void setCreator(List<String> creator) {
+	public void setCreator(List<SoftwareCreator> creator) {
 		this.creator = creator;
 	}
 
