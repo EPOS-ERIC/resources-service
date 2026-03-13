@@ -6,8 +6,11 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.epos.api.beans.OrganizationBean;
+import org.epos.api.beans.OrganizationFullBean;
+import org.epos.api.core.organizations.OrganisationsFullGeneration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -260,6 +263,15 @@ public class ResourcesApiController extends ApiController implements ResourcesAp
 		}
 
 		return standardRequest("ORGANISATIONS", requestParams, null);
+	}
+
+	@Override
+	public ResponseEntity<List<OrganizationFullBean>> organisationsFullUsingGet() {
+		List<OrganizationFullBean> response = OrganisationsFullGeneration.generate();
+		if (response.isEmpty()) {
+			return ResponseEntity.noContent().build();
+		}
+		return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(response);
 	}
 
 }

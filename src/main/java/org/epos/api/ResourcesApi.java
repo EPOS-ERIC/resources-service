@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import org.epos.api.beans.OrganizationBean;
+import org.epos.api.beans.OrganizationFullBean;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -115,6 +116,28 @@ public interface ResourcesApi {
 			@Parameter(in = ParameterIn.QUERY, description = "q" ,schema=@Schema()) @Valid @RequestParam(value = "q", required = false) String q, 
 			@Parameter(in = ParameterIn.QUERY, description = "country" ,schema=@Schema()) @Valid @RequestParam(value = "country", required = false) String country, 
 			@Parameter(in = ParameterIn.QUERY, description = "type of organization, comma separated values from the following list {dataproviders, serviceproviders, facilitiesproviders}" ,schema=@Schema()) @Valid @RequestParam(value = "type", required = false) String type);
+
+	@Operation(summary = "organisation full operation", description = "organisation full endpoint", tags={ "Resources Service" })
+	@ApiResponses(value = {
+			@ApiResponse(responseCode = "200", description = "ok.", content = @Content(mediaType = "application/json", schema = @Schema(implementation = OrganizationFullBean.class))),
+
+			@ApiResponse(responseCode = "201", description = "Created."),
+
+			@ApiResponse(responseCode = "204", description = "No content."),
+
+			@ApiResponse(responseCode = "301", description = "Moved Permanently."),
+
+			@ApiResponse(responseCode = "400", description = "Bad request."),
+
+			@ApiResponse(responseCode = "401", description = "Access token is missing or invalid"),
+
+			@ApiResponse(responseCode = "403", description = "Forbidden"),
+
+			@ApiResponse(responseCode = "404", description = "Not Found") })
+	@RequestMapping(value = "/resources/organizations/full",
+	produces = { "application/json" },
+	method = RequestMethod.GET)
+	ResponseEntity<List<OrganizationFullBean>> organisationsFullUsingGet();
 
 
 }
