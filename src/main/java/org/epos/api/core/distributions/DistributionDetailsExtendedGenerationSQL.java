@@ -899,7 +899,7 @@ public class DistributionDetailsExtendedGenerationSQL {
         Set<String> keywords = new HashSet<>();
 
         if (dpKeywords != null && !dpKeywords.isEmpty()) {
-            Arrays.stream(dpKeywords.split(",\t"))
+            Arrays.stream(dpKeywords.split("\\s*,\\s*"))
                     .map(String::toLowerCase)
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
@@ -907,7 +907,7 @@ public class DistributionDetailsExtendedGenerationSQL {
         }
 
         if (wsKeywords != null && !wsKeywords.isEmpty()) {
-            Arrays.stream(wsKeywords.split(",\t"))
+            Arrays.stream(wsKeywords.split("\\s*,\\s*"))
                     .map(String::toLowerCase)
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())

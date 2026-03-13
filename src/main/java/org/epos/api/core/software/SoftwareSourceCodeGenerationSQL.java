@@ -228,7 +228,7 @@ public class SoftwareSourceCodeGenerationSQL {
 
         // Keywords
         if (keywords != null && !keywords.trim().isEmpty()) {
-            List<String> kw = Arrays.stream(keywords.split(","))
+            List<String> kw = Arrays.stream(keywords.split("\\s*,\\s*"))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
                     .collect(Collectors.toList());
