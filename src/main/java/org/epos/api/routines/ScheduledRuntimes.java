@@ -89,8 +89,7 @@ public class ScheduledRuntimes {
 		}
 	}
 
-	@Scheduled(fixedRate = 90000, initialDelay = 0)
-	@Async
+	@Scheduled(fixedDelayString = "${cache_facets:90000}", initialDelayString = "${cache_facets:90000}")
 	public void facetsUpdater() {
 		LOGGER.info("[Scheduled Task - Facets] Updating facets information");
 
