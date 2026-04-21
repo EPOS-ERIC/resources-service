@@ -2,10 +2,47 @@ package org.epos.api.core.distributions;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import org.apache.commons.codec.digest.DigestUtils;
+import org.epos.api.beans.AvailableFormat;
+import org.epos.api.beans.DataServiceProvider;
+import org.epos.api.beans.DiscoveryItem;
+import org.epos.api.beans.DiscoveryItem.DiscoveryItemBuilder;
+import org.epos.api.beans.NodeFilters;
+import org.epos.api.beans.SearchResponse;
+import org.epos.api.core.AvailableFormatsBuilder;
+import org.epos.api.core.DataServiceProviderGenerationSQL;
+import org.epos.api.core.EnvironmentVariables;
+import org.epos.api.core.ZabbixExecutor;
+import org.epos.api.facets.Facets;
+import org.epos.api.facets.FacetsGeneration;
+import org.epos.api.facets.Node;
+import org.epos.api.routines.DatabaseConnections;
+import org.epos.api.utility.BBoxToPolygon;
+import org.epos.eposdatamodel.Group;
+import org.epos.eposdatamodel.Organization;
+import org.epos.eposdatamodel.User;
+import org.epos.eposdatamodel.UserGroup;
+import org.epos.handler.dbapi.service.EntityManagerService;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.io.WKTReader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -13,29 +50,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
-
+import model.RoleType;
 import model.StatusType;
-import org.apache.commons.codec.digest.DigestUtils;
-import org.epos.api.facets.Facets;
-import org.epos.eposdatamodel.User;
-import org.epos.api.beans.*;
-import org.epos.api.beans.DiscoveryItem.DiscoveryItemBuilder;
-import org.epos.api.core.AvailableFormatsBuilder;
-import org.epos.api.core.DataServiceProviderGeneration;
-import org.epos.api.core.DataServiceProviderGenerationSQL;
-import org.epos.api.core.EnvironmentVariables;
-import org.epos.api.core.ZabbixExecutor;
-import org.epos.api.facets.FacetsGeneration;
-import org.epos.api.facets.Node;
-import org.epos.eposdatamodel.Organization;
-import org.epos.handler.dbapi.service.EntityManagerService;
-import org.epos.api.utility.BBoxToPolygon;
-import org.epos.api.routines.DatabaseConnections;
-import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.geom.GeometryFactory;
-import org.locationtech.jts.io.WKTReader;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import usermanagementapis.UserGroupManagementAPI;
 
 
 public class DistributionSearchGenerationSQL {
@@ -76,6 +93,26 @@ public class DistributionSearchGenerationSQL {
             this.sql = new StringBuilder(SQL_BUILDER_INITIAL_CAPACITY);
             this.params = new HashMap<>(32);
             this.paramIndex = 1;
+        }
+    }
+
+    /**
+     * Access scope resolved once per request to avoid recomputing role/group checks
+     * for each SQL fragment.
+     */
+    private static final class AccessContext {
+        final boolean globalAdmin;
+        final String userId;
+        final List<String> adminGroupMetaIds;
+
+        AccessContext(boolean globalAdmin, String userId, List<String> adminGroupMetaIds) {
+            this.globalAdmin = globalAdmin;
+            this.userId = userId;
+            this.adminGroupMetaIds = adminGroupMetaIds;
+        }
+
+        boolean hasAdminGroupMetaIds() {
+            return adminGroupMetaIds != null && !adminGroupMetaIds.isEmpty();
         }
     }
 
@@ -313,34 +350,92 @@ public class DistributionSearchGenerationSQL {
     }
 
     /**
+     * Resolves user access scope once per request.
+     *
+     * Rules:
+     * - Global admin can access all statuses when requested.
+     * - Group admin can access non-published statuses for metadata in administered groups.
+     * - Regular user can access only own non-published statuses.
+     */
+    private static AccessContext buildAccessContext(User user) {
+        if (user == null) {
+            return new AccessContext(false, null, Collections.emptyList());
+        }
+
+        boolean globalAdmin = Boolean.TRUE.equals(user.getIsAdmin());
+        String userId = user.getAuthIdentifier();
+
+        if (globalAdmin) {
+            return new AccessContext(true, userId, Collections.emptyList());
+        }
+
+        Set<String> adminGroupMetaIds = new LinkedHashSet<>();
+        List<UserGroup> userGroups = user.getGroups();
+
+        if (userGroups != null) {
+            for (UserGroup userGroup : userGroups) {
+                if (userGroup == null || userGroup.getRole() != RoleType.ADMIN) {
+                    continue;
+                }
+
+                String groupId = userGroup.getGroupId();
+                if (groupId == null || groupId.trim().isEmpty()) {
+                    continue;
+                }
+                String trimmedGroupId = groupId.trim();
+
+                try {
+                    Group group = UserGroupManagementAPI.retrieveGroupById(trimmedGroupId);
+                    if (group == null || group.getEntities() == null) {
+                        continue;
+                    }
+
+                    for (String metaId : group.getEntities()) {
+                        if (metaId != null) {
+                            String trimmedMetaId = metaId.trim();
+                            if (!trimmedMetaId.isEmpty()) {
+                                adminGroupMetaIds.add(trimmedMetaId);
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    LOGGER.warn("Failed to resolve group '{}' for user '{}': {}", trimmedGroupId, userId, e.getMessage());
+                }
+            }
+        }
+
+        return new AccessContext(false, userId, new ArrayList<>(adminGroupMetaIds));
+    }
+
+    /**
      * Builds the versioning status filter clause for SQL queries.
      * 
      * This method implements the access control logic:
-     * - Admin users: can see all requested statuses (no editor_id restriction)
-     * - Authenticated non-admin users: can see PUBLISHED + their own non-published content (filtered by editor_id)
+     * - Global admin users: can see all requested statuses
+     * - Group admin users: can see PUBLISHED + scoped non-published content
+     * - Authenticated non-admin users: can see PUBLISHED + own non-published content
      * - Unauthenticated users: can only see PUBLISHED
      * 
      * @param ctx the query context for parameter binding
-     * @param user the current user (may be null for unauthenticated access)
+     * @param accessContext resolved user access scope
      * @param parameters the request parameters
      * @param requestedStatuses the list of statuses requested
      * @param tableAlias the alias for the versioningstatus table (e.g., "v")
+     * @param metaIdColumn SQL expression for meta_id scope checks (e.g., "d.meta_id")
      */
-    private static void buildVersioningStatusFilter(QueryContext ctx, User user, Map<String, Object> parameters,
-                                                     List<String> requestedStatuses, String tableAlias) {
+    private static void buildVersioningStatusFilter(QueryContext ctx, AccessContext accessContext,
+                                                     Map<String, Object> parameters, List<String> requestedStatuses,
+                                                     String tableAlias, String metaIdColumn) {
         boolean hasVersioningStatusParam = parameters.containsKey("versioningStatus");
-        boolean includesPublished = requestedStatuses.contains("PUBLISHED");
-        
-        // Get non-PUBLISHED statuses
-        List<String> nonPublishedStatuses = requestedStatuses.stream()
-                .filter(s -> !"PUBLISHED".equals(s))
-                .collect(Collectors.toList());
 
-        if (user == null) {
-            // Unauthenticated users: only PUBLISHED
+        // Keep current behavior for requests without explicit versioningStatus
+        if (!hasVersioningStatusParam) {
             ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
-        } else if (user.getIsAdmin() && hasVersioningStatusParam) {
-            // Admin users: can see all requested statuses without editor_id restriction
+            return;
+        }
+
+        if (accessContext != null && accessContext.globalAdmin) {
+            // Global admin users: can see all requested statuses
             if (requestedStatuses.isEmpty()) {
                 ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
             } else {
@@ -351,24 +446,61 @@ public class DistributionSearchGenerationSQL {
                 }
                 ctx.sql.append(")");
             }
-        } else if (hasVersioningStatusParam && !nonPublishedStatuses.isEmpty()) {
-            // Authenticated non-admin users: PUBLISHED (if requested) + their own non-published content
-            ctx.sql.append("(");
-            if (includesPublished) {
-                ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
-                ctx.sql.append(" OR ");
-            }
-            ctx.sql.append("(").append(tableAlias).append(".status IN (");
-            for (int i = 0; i < nonPublishedStatuses.size(); i++) {
-                if (i > 0) ctx.sql.append(", ");
-                ctx.sql.append(nextParam(ctx, nonPublishedStatuses.get(i)));
-            }
-            ctx.sql.append(") AND ").append(tableAlias).append(".editor_id = ")
-                    .append(nextParam(ctx, user.getAuthIdentifier())).append(")");
-            ctx.sql.append(")");
-        } else {
-            // Default: only PUBLISHED
+            return;
+        }
+
+        if (accessContext == null || accessContext.userId == null || accessContext.userId.trim().isEmpty()) {
+            // Unauthenticated users: only PUBLISHED
             ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+            return;
+        }
+
+        if (requestedStatuses.isEmpty()) {
+            // Defensive fallback
+            ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+            return;
+        }
+
+        boolean includesPublished = requestedStatuses.contains("PUBLISHED");
+        List<String> nonPublishedStatuses = requestedStatuses.stream()
+                .filter(s -> !"PUBLISHED".equals(s))
+                .collect(Collectors.toList());
+
+        if (nonPublishedStatuses.isEmpty()) {
+            // Explicit request with only PUBLISHED status
+            ctx.sql.append(tableAlias).append(".status = 'PUBLISHED'");
+            return;
+        }
+
+        // Authenticated non-global-admin users:
+        // - PUBLISHED is always visible
+        // - non-published statuses are restricted by scope (own + optional group-admin scope)
+        if (includesPublished) {
+            ctx.sql.append("(").append(tableAlias).append(".status = 'PUBLISHED' OR (");
+        }
+
+        ctx.sql.append(tableAlias).append(".status IN (");
+        for (int i = 0; i < nonPublishedStatuses.size(); i++) {
+            if (i > 0) {
+                ctx.sql.append(", ");
+            }
+            ctx.sql.append(nextParam(ctx, nonPublishedStatuses.get(i)));
+        }
+        ctx.sql.append(") AND (");
+
+        ctx.sql.append(tableAlias).append(".editor_id = ")
+                .append(nextParam(ctx, accessContext.userId));
+
+        if (accessContext.hasAdminGroupMetaIds()) {
+            ctx.sql.append(" OR ");
+            ctx.sql.append(metaIdColumn).append(" IN ")
+                    .append(nextListParam(ctx, accessContext.adminGroupMetaIds));
+        }
+
+        ctx.sql.append(")");
+
+        if (includesPublished) {
+            ctx.sql.append("))");
         }
     }
 
@@ -393,6 +525,7 @@ public class DistributionSearchGenerationSQL {
 
         // Extract and validate filter parameters
         List<String> requestedStatuses = getStatusList(parameters, user);
+        AccessContext accessContext = parameters.containsKey("versioningStatus") ? buildAccessContext(user) : null;
         List<String> organizations = getListParam(parameters, "organisations");
         List<String> keywords = cleanKeywords(getListParam(parameters, "keywords"));
         List<String> scienceDomains = getListParam(parameters, PARAMETER__SCIENCE_DOMAIN);
@@ -406,8 +539,9 @@ public class DistributionSearchGenerationSQL {
 
         // CTE 1: Published Distributions - base set filtered by versioning status
         // Build the status filter based on user permissions:
-        // - Admin users: can see all requested statuses
-        // - Authenticated non-admin users: can see PUBLISHED + their own non-published content
+        // - Global admin users: can see all requested statuses
+        // - Group admin users: can see PUBLISHED + scoped non-published content
+        // - Authenticated non-admin users: can see PUBLISHED + own non-published content
         // - Unauthenticated users: can only see PUBLISHED
         ctx.sql.append("published_distributions AS ( ")
                 .append("SELECT d.instance_id, d.meta_id, d.uid, d.format, d.version_id, ")
@@ -416,7 +550,7 @@ public class DistributionSearchGenerationSQL {
                 .append("JOIN metadata_catalogue.versioningstatus v ON d.version_id = v.version_id ")
                 .append("WHERE ");
 
-        buildVersioningStatusFilter(ctx, user, parameters, requestedStatuses, "v");
+        buildVersioningStatusFilter(ctx, accessContext, parameters, requestedStatuses, "v", "d.meta_id");
         ctx.sql.append("), ");
 
         // CTE 2: DataProduct Info - with temporal, keyword, and category filters
@@ -442,7 +576,7 @@ public class DistributionSearchGenerationSQL {
 
         ctx.sql.append("WHERE ddp.distribution_instance_id IN (SELECT instance_id FROM published_distributions) ")
                 .append("AND ");
-        buildVersioningStatusFilter(ctx, user, parameters, requestedStatuses, "v");
+        buildVersioningStatusFilter(ctx, accessContext, parameters, requestedStatuses, "v", "dp.meta_id");
 
         // Temporal range filter (inclusive boundaries with NULL handling)
         if (startDate != null) {
