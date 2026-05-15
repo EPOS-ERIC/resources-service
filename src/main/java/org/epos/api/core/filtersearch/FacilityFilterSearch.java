@@ -317,7 +317,7 @@ public class FacilityFilterSearch {
                 });
             }
 
-            if (qSMap.values().stream().allMatch(b -> b)) {
+            if (qSMap.values().stream().anyMatch(b -> b)) {
                 tempDatasetList.add(edmFacility);
             }
         });

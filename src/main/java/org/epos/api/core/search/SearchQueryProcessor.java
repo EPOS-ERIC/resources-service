@@ -25,7 +25,11 @@ public class SearchQueryProcessor {
             "any", "as", "if", "because", "until", "while", "show", "me", "get",
             "make", "like", "also", "well", "back", "even", "still", "way",
             "take", "come", "go", "see", "know", "want", "look", "use", "find",
-            "give", "tell", "think", "say", "much", "many", "really"
+            "give", "tell", "think", "say", "much", "many", "really",
+            "looking", "regarding", "regards", "need", "needs", "please",
+            "help", "search", "find", "showing", "shows", "something",
+            "anything", "everything", "nothing", "someone", "everyone",
+            "would", "could", "should", "might", "must", "shall"
     );
 
     public static List<String> processQuery(String query) {
