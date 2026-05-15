@@ -10,6 +10,10 @@ import metadataapis.EntityNames;
 import org.epos.api.beans.DataServiceProvider;
 import org.epos.api.core.DataServiceProviderGeneration;
 import org.epos.api.core.PreFetchedEntities;
+import org.epos.api.core.search.SearchQueryProcessor;
+import org.epos.api.core.search.SearchReranker;
+import org.epos.api.core.search.SearchSynonyms;
+import org.epos.api.core.search.TextSimilarityScorer;
 import org.epos.api.utility.BBoxToPolygon;
 import org.epos.eposdatamodel.*;
 import org.locationtech.jts.geom.Geometry;
@@ -41,6 +45,8 @@ public class FacilityFilterSearch {
     public static List<Facility> doFilters(List<Facility> facilityList, Map<String, Object> parameters,
                                            List<Category> categories, List<Organization> organizationForOwners) {
 
+        SearchSynonyms.initialize();
+        
         // Pre-fetch all linked entities at once
         PreFetchedEntities preFetched = preFetchLinkedEntities(facilityList);
 
@@ -256,8 +262,12 @@ public class FacilityFilterSearch {
             return facilityList;
         }
 
-        String[] qs = parameters.get("q").toString().toLowerCase().split(",");
-        Set<String> searchTerms = new HashSet<>(Arrays.asList(qs));
+        String originalQuery = parameters.get("q").toString();
+        List<String> searchTerms = SearchQueryProcessor.processQueryWithSynonyms(originalQuery, new SearchSynonyms());
+        
+        if (searchTerms.isEmpty()) {
+            return facilityList;
+        }
 
         Set<Facility> tempDatasetList = ConcurrentHashMap.newKeySet();
         boolean useParallel = facilityList.size() > 100;
@@ -266,18 +276,23 @@ public class FacilityFilterSearch {
             Map<String, Boolean> qSMap = searchTerms.stream()
                     .collect(Collectors.toMap(key -> key, value -> Boolean.FALSE));
 
-            // Check keywords
             if (edmFacility.getKeywords() != null) {
                 List<String> dataproductKeywords = edmFacility.getKeywords();
 
                 qSMap.keySet().forEach(q -> {
                     if (dataproductKeywords.contains(q)) {
                         qSMap.put(q, Boolean.TRUE);
+                    } else {
+                        for (String keyword : dataproductKeywords) {
+                            if (TextSimilarityScorer.calculateSimilarity(q, keyword) > 0.0) {
+                                qSMap.put(q, Boolean.TRUE);
+                                break;
+                            }
+                        }
                     }
                 });
             }
 
-            // Check title
             if (edmFacility.getTitle() != null) {
                 qSMap.keySet().forEach(q -> {
                     if (edmFacility.getTitle().toLowerCase().contains(q)) {
@@ -286,7 +301,6 @@ public class FacilityFilterSearch {
                 });
             }
 
-            // Check description
             if (edmFacility.getDescription() != null) {
                 qSMap.keySet().forEach(q -> {
                     if (edmFacility.getDescription().toLowerCase().contains(q)) {
@@ -295,7 +309,6 @@ public class FacilityFilterSearch {
                 });
             }
 
-            // Check UID
             if (edmFacility.getUid() != null) {
                 qSMap.keySet().forEach(q -> {
                     if (edmFacility.getUid().toLowerCase().contains(q)) {

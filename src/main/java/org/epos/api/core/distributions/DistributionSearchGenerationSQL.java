@@ -28,6 +28,9 @@ import org.epos.api.core.AvailableFormatsBuilder;
 import org.epos.api.core.DataServiceProviderGenerationSQL;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.core.ZabbixExecutor;
+import org.epos.api.core.search.SearchQueryProcessor;
+import org.epos.api.core.search.SearchReranker;
+import org.epos.api.core.search.SearchSynonyms;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
 import org.epos.api.facets.Node;
@@ -198,9 +201,16 @@ public class DistributionSearchGenerationSQL {
         final long startTime = System.nanoTime();
         LOGGER.info("Initiating distribution search with parameters: {}", parameters);
 
+        SearchSynonyms.initialize();
+
         try {
             FilterData filterData = new FilterData();
             List<DiscoveryItem> discoveryItems = executeWithEntityManager(parameters, user, filterData);
+
+            String freeTextQuery = (String) parameters.get("q");
+            if (freeTextQuery != null && !freeTextQuery.trim().isEmpty()) {
+                discoveryItems = SearchReranker.rerank(discoveryItems, freeTextQuery);
+            }
 
             LOGGER.debug("Query execution completed in {} ms, retrieved {} results",
                     (System.nanoTime() - startTime) / 1_000_000, discoveryItems.size());
@@ -531,6 +541,8 @@ public class DistributionSearchGenerationSQL {
         List<String> scienceDomains = getListParam(parameters, PARAMETER__SCIENCE_DOMAIN);
         List<String> serviceTypes = getListParam(parameters, PARAMETER__SERVICE_TYPE);
         String freeTextQuery = (String) parameters.get("q");
+        
+        List<String> processedSearchTerms = SearchQueryProcessor.getSearchTermsForSQLWithSynonyms(freeTextQuery, new SearchSynonyms());
 
         Timestamp startDate = parseDateParam(parameters.get("schema:startDate"));
         Timestamp endDate = parseDateParam(parameters.get("schema:endDate"));
@@ -691,7 +703,7 @@ public class DistributionSearchGenerationSQL {
         buildAggregationCTEs(ctx);
 
         // Main SELECT with all JOINs
-        buildMainSelect(ctx, freeTextQuery);
+        buildMainSelect(ctx, processedSearchTerms);
 
         return ctx;
     }
@@ -828,7 +840,7 @@ public class DistributionSearchGenerationSQL {
     /**
      * Builds the main SELECT statement with all JOINs and optional free-text filtering.
      */
-    private static void buildMainSelect(QueryContext ctx, String freeTextQuery) {
+    private static void buildMainSelect(QueryContext ctx, List<String> processedSearchTerms) {
         ctx.sql.append("SELECT ")
                 .append("pd.instance_id AS id, pd.uid, pd.meta_id, ")
                 .append("COALESCE(dt.title, '') AS title, ")
@@ -863,27 +875,15 @@ public class DistributionSearchGenerationSQL {
                 .append("LEFT JOIN operation_services os ON pd.instance_id = os.distribution_instance_id ")
                 .append("LEFT JOIN has_access_service has ON pd.instance_id = has.distribution_instance_id ");
 
-        // Free-text search across title, description, and keywords
-        if (freeTextQuery != null && !freeTextQuery.trim().isEmpty()) {
-            String[] tokens = WHITESPACE_SPLIT_PATTERN.split(freeTextQuery);
-            List<String> validTokens = new ArrayList<>(tokens.length);
-            for (String token : tokens) {
-                String trimmed = token.trim();
-                if (!trimmed.isEmpty()) {
-                    validTokens.add(trimmed);
-                }
-            }
-
-            if (!validTokens.isEmpty()) {
-                ctx.sql.append(" WHERE ");
-                for (int k = 0; k < validTokens.size(); k++) {
-                    if (k > 0) ctx.sql.append(" AND ");
-                    String tokenParam = nextParam(ctx, "%" + validTokens.get(k) + "%");
-                    ctx.sql.append(" (dt.title ILIKE ").append(tokenParam)
-                            .append(" OR dd.description ILIKE ").append(tokenParam)
-                            .append(" OR ARRAY_TO_STRING(dk.keywords, ' ') ILIKE ").append(tokenParam)
-                            .append(") ");
-                }
+        if (processedSearchTerms != null && !processedSearchTerms.isEmpty()) {
+            ctx.sql.append(" WHERE ");
+            for (int k = 0; k < processedSearchTerms.size(); k++) {
+                if (k > 0) ctx.sql.append(" AND ");
+                String tokenParam = nextParam(ctx, "%" + processedSearchTerms.get(k) + "%");
+                ctx.sql.append(" (dt.title ILIKE ").append(tokenParam)
+                        .append(" OR dd.description ILIKE ").append(tokenParam)
+                        .append(" OR ARRAY_TO_STRING(dk.keywords, ' ') ILIKE ").append(tokenParam)
+                        .append(") ");
             }
         }
 
