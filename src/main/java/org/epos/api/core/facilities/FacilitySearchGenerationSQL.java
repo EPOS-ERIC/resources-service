@@ -22,13 +22,14 @@ import org.epos.api.beans.SearchResponse;
 import org.epos.api.core.AvailableFormatsBuilder;
 import org.epos.api.core.DataServiceProviderGeneration;
 import org.epos.api.core.EnvironmentVariables;
+import org.epos.api.core.search.HierarchicalSearchReranker;
+import org.epos.api.core.search.QueryTerm;
 import org.epos.api.core.search.SearchQueryProcessor;
 import org.epos.api.core.search.SearchReranker;
 import org.epos.api.core.search.SearchSynonyms;
-import org.epos.api.routines.DatabaseConnections;
-import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
+import org.epos.api.facets.FacetsNodeTree;
 import org.epos.api.facets.Node;
 import org.epos.api.utility.BBoxToPolygon;
 import org.epos.eposdatamodel.Organization;
@@ -240,7 +241,10 @@ public class FacilitySearchGenerationSQL {
         List<String> keywords = getListParam(parameters, "keywords");
         String freeTextQuery = (String) parameters.get("q");
         
-        List<String> processedSearchTerms = SearchQueryProcessor.getSearchTermsForSQLWithSynonyms(freeTextQuery, new SearchSynonyms());
+        List<QueryTerm> analyzedTerms = SearchQueryProcessor.getAnalyzedTermsWithSynonyms(freeTextQuery, new SearchSynonyms());
+        List<String> processedSearchTerms = analyzedTerms.stream()
+                .map(QueryTerm::getTerm)
+                .collect(Collectors.toList());
 
         ctx.sql.append("WITH ");
 
@@ -338,12 +342,14 @@ public class FacilitySearchGenerationSQL {
                 ctx.sql.append(" ) ");
             }
 
-            if (processedSearchTerms != null && !processedSearchTerms.isEmpty()) {
+            if (analyzedTerms != null && !analyzedTerms.isEmpty()) {
                 ctx.sql.append(" AND (");
-                for (int i = 0; i < processedSearchTerms.size(); i++) {
-                    if (!processedSearchTerms.get(i).trim().isEmpty()) {
+                for (int i = 0; i < analyzedTerms.size(); i++) {
+                    QueryTerm qTerm = analyzedTerms.get(i);
+                    String term = qTerm.getTerm().trim();
+                    if (!term.isEmpty()) {
                         if (i > 0) ctx.sql.append(" OR ");
-                        String tokenParam = nextParam(ctx, "%" + processedSearchTerms.get(i).trim() + "%");
+                        String tokenParam = nextParam(ctx, "%" + term + "%");
                         ctx.sql.append("pf.title ILIKE ").append(tokenParam)
                                 .append(" OR pf.description ILIKE ").append(tokenParam)
                                 .append(" OR pf.keywords ILIKE ").append(tokenParam);
@@ -768,9 +774,12 @@ public class FacilitySearchGenerationSQL {
             String facetsType = parameters.get("facetstype") != null ? parameters.get("facetstype").toString() : "";
             switch (facetsType) {
                 case "categories":
-                    var facets = FacetsGeneration.generateResponseUsingCategories(discoveryItems, Facets.Type.FACILITY)
-                            .getFacets();
-                    results.addChild(facets);
+                    FacetsNodeTree facetsTree = FacetsGeneration.generateResponseUsingCategories(discoveryItems, Facets.Type.FACILITY);
+                    String freeTextQuery = (String) parameters.get("q");
+                    if (freeTextQuery != null && !freeTextQuery.trim().isEmpty()) {
+                        HierarchicalSearchReranker.rerankHierarchicalResponse(facetsTree, freeTextQuery);
+                    }
+                    results.addChild(facetsTree.getFacets());
                     break;
                 case "facilityproviders":
                     results.addChild(FacetsGeneration.generateResponseUsingDataproviders(discoveryItems).getFacets());

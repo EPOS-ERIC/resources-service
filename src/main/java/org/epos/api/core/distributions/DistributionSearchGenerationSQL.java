@@ -28,11 +28,14 @@ import org.epos.api.core.AvailableFormatsBuilder;
 import org.epos.api.core.DataServiceProviderGenerationSQL;
 import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.core.ZabbixExecutor;
+import org.epos.api.core.search.HierarchicalSearchReranker;
+import org.epos.api.core.search.QueryTerm;
 import org.epos.api.core.search.SearchQueryProcessor;
 import org.epos.api.core.search.SearchReranker;
 import org.epos.api.core.search.SearchSynonyms;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
+import org.epos.api.facets.FacetsNodeTree;
 import org.epos.api.facets.Node;
 import org.epos.api.routines.DatabaseConnections;
 import org.epos.api.utility.BBoxToPolygon;
@@ -542,7 +545,10 @@ public class DistributionSearchGenerationSQL {
         List<String> serviceTypes = getListParam(parameters, PARAMETER__SERVICE_TYPE);
         String freeTextQuery = (String) parameters.get("q");
         
-        List<String> processedSearchTerms = SearchQueryProcessor.getSearchTermsForSQLWithSynonyms(freeTextQuery, new SearchSynonyms());
+        List<QueryTerm> analyzedTerms = SearchQueryProcessor.getAnalyzedTermsWithSynonyms(freeTextQuery, new SearchSynonyms());
+        List<String> processedSearchTerms = analyzedTerms.stream()
+                .map(QueryTerm::getTerm)
+                .collect(Collectors.toList());
 
         Timestamp startDate = parseDateParam(parameters.get("schema:startDate"));
         Timestamp endDate = parseDateParam(parameters.get("schema:endDate"));
@@ -703,7 +709,7 @@ public class DistributionSearchGenerationSQL {
         buildAggregationCTEs(ctx);
 
         // Main SELECT with all JOINs
-        buildMainSelect(ctx, processedSearchTerms);
+        buildMainSelect(ctx, analyzedTerms);
 
         return ctx;
     }
@@ -840,7 +846,7 @@ public class DistributionSearchGenerationSQL {
     /**
      * Builds the main SELECT statement with all JOINs and optional free-text filtering.
      */
-    private static void buildMainSelect(QueryContext ctx, List<String> processedSearchTerms) {
+    private static void buildMainSelect(QueryContext ctx, List<QueryTerm> analyzedTerms) {
         ctx.sql.append("SELECT ")
                 .append("pd.instance_id AS id, pd.uid, pd.meta_id, ")
                 .append("COALESCE(dt.title, '') AS title, ")
@@ -875,14 +881,24 @@ public class DistributionSearchGenerationSQL {
                 .append("LEFT JOIN operation_services os ON pd.instance_id = os.distribution_instance_id ")
                 .append("LEFT JOIN has_access_service has ON pd.instance_id = has.distribution_instance_id ");
 
-        if (processedSearchTerms != null && !processedSearchTerms.isEmpty()) {
+        if (analyzedTerms != null && !analyzedTerms.isEmpty()) {
             ctx.sql.append(" WHERE (");
-            for (int k = 0; k < processedSearchTerms.size(); k++) {
+            for (int k = 0; k < analyzedTerms.size(); k++) {
                 if (k > 0) ctx.sql.append(" OR ");
-                String tokenParam = nextParam(ctx, "%" + processedSearchTerms.get(k) + "%");
-                ctx.sql.append("dt.title ILIKE ").append(tokenParam)
-                        .append(" OR dd.description ILIKE ").append(tokenParam)
-                        .append(" OR ARRAY_TO_STRING(dk.keywords, ' ') ILIKE ").append(tokenParam);
+                QueryTerm qTerm = analyzedTerms.get(k);
+                String term = qTerm.getTerm();
+                
+                if (qTerm.isPhrase()) {
+                    String phraseParam = nextParam(ctx, "%" + term + "%");
+                    ctx.sql.append("dt.title ILIKE ").append(phraseParam)
+                            .append(" OR dd.description ILIKE ").append(phraseParam)
+                            .append(" OR ARRAY_TO_STRING(dk.keywords, ' ') ILIKE ").append(phraseParam);
+                } else {
+                    String tokenParam = nextParam(ctx, "%" + term + "%");
+                    ctx.sql.append("dt.title ILIKE ").append(tokenParam)
+                            .append(" OR dd.description ILIKE ").append(tokenParam)
+                            .append(" OR ARRAY_TO_STRING(dk.keywords, ' ') ILIKE ").append(tokenParam);
+                }
             }
             ctx.sql.append(") ");
         }
@@ -1246,7 +1262,12 @@ public class DistributionSearchGenerationSQL {
             String facetsType = (String) parameters.getOrDefault("facetstype", "default");
             switch (facetsType) {
                 case "categories":
-                    results.addChild(FacetsGeneration.generateResponseUsingCategories(discoverySet, Facets.Type.DATA).getFacets());
+                    FacetsNodeTree facetsTree = FacetsGeneration.generateResponseUsingCategories(discoverySet, Facets.Type.DATA);
+                    String freeTextQuery = (String) parameters.get("q");
+                    if (freeTextQuery != null && !freeTextQuery.trim().isEmpty()) {
+                        HierarchicalSearchReranker.rerankHierarchicalResponse(facetsTree, freeTextQuery);
+                    }
+                    results.addChild(facetsTree.getFacets());
                     break;
                 case "dataproviders":
                     results.addChild(FacetsGeneration.generateResponseUsingDataproviders(discoverySet).getFacets());
