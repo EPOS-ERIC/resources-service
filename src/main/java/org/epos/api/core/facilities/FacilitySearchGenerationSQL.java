@@ -339,14 +339,17 @@ public class FacilitySearchGenerationSQL {
             }
 
             if (processedSearchTerms != null && !processedSearchTerms.isEmpty()) {
-                for (String token : processedSearchTerms) {
-                    if (!token.trim().isEmpty()) {
-                        String tokenParam = nextParam(ctx, "%" + token.trim() + "%");
-                        ctx.sql.append(" AND (pf.title ILIKE ").append(tokenParam)
+                ctx.sql.append(" AND (");
+                for (int i = 0; i < processedSearchTerms.size(); i++) {
+                    if (!processedSearchTerms.get(i).trim().isEmpty()) {
+                        if (i > 0) ctx.sql.append(" OR ");
+                        String tokenParam = nextParam(ctx, "%" + processedSearchTerms.get(i).trim() + "%");
+                        ctx.sql.append("pf.title ILIKE ").append(tokenParam)
                                 .append(" OR pf.description ILIKE ").append(tokenParam)
-                                .append(" OR pf.keywords ILIKE ").append(tokenParam).append(") ");
+                                .append(" OR pf.keywords ILIKE ").append(tokenParam);
                     }
                 }
+                ctx.sql.append(") ");
             }
 
             if (!equipmentTypes.isEmpty()) {

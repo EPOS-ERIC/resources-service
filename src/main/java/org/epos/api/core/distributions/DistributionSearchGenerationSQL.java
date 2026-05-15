@@ -876,15 +876,15 @@ public class DistributionSearchGenerationSQL {
                 .append("LEFT JOIN has_access_service has ON pd.instance_id = has.distribution_instance_id ");
 
         if (processedSearchTerms != null && !processedSearchTerms.isEmpty()) {
-            ctx.sql.append(" WHERE ");
+            ctx.sql.append(" WHERE (");
             for (int k = 0; k < processedSearchTerms.size(); k++) {
-                if (k > 0) ctx.sql.append(" AND ");
+                if (k > 0) ctx.sql.append(" OR ");
                 String tokenParam = nextParam(ctx, "%" + processedSearchTerms.get(k) + "%");
-                ctx.sql.append(" (dt.title ILIKE ").append(tokenParam)
+                ctx.sql.append("dt.title ILIKE ").append(tokenParam)
                         .append(" OR dd.description ILIKE ").append(tokenParam)
-                        .append(" OR ARRAY_TO_STRING(dk.keywords, ' ') ILIKE ").append(tokenParam)
-                        .append(") ");
+                        .append(" OR ARRAY_TO_STRING(dk.keywords, ' ') ILIKE ").append(tokenParam);
             }
+            ctx.sql.append(") ");
         }
 
         ctx.sql.append(" ORDER BY pd.instance_id ");

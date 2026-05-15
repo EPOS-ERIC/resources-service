@@ -628,7 +628,7 @@ public class DistributionFilterSearch {
                 });
             }
 
-            if (qSMap.values().stream().allMatch(b -> b)) {
+            if (qSMap.values().stream().anyMatch(b -> b)) {
                 tempDatasetList.add(edmDataproduct);
             }
         });

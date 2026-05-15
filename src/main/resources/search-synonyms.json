@@ -1,7 +1,10 @@
 {
   "synonyms": {
-    "earthquake": ["seismic", "tremor", "quake"],
-    "seismic": ["earthquake", "tremor"],
+    "irpinia": ["irpinia earthquake", "irpinia seismic", "southern italy", "campania", "benevento", "avellino"],
+    "earthquake": ["seismic", "tremor", "quake", "seismic event", "earthquake event"],
+    "seismic": ["earthquake", "tremor", "seismic event"],
+    "event": ["seismic event", "earthquake", "occurrence"],
+    "events": ["seismic events", "earthquakes", "occurrences"],
     "fault": ["fracture", "rupture", "crack"],
     "volcano": ["volcanic", "eruption", "magmatic"],
     "volcanic": ["volcano", "eruption", "magmatic"],
