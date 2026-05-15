@@ -42,22 +42,49 @@ public class SearchReranker {
             return items;
         }
 
-        int totalDocs = items.size();
+        return rerankWithProgressiveFiltering(items, queryTerms);
+    }
 
+    private static List<DiscoveryItem> rerankWithProgressiveFiltering(List<DiscoveryItem> items, List<QueryTerm> queryTerms) {
+        int totalDocs = items.size();
         Map<String, Integer> termDocFrequency = calculateDocFrequencies(items, queryTerms);
 
         List<ScoredItem> scoredItems = new ArrayList<>();
-
         for (DiscoveryItem item : items) {
             double score = calculateBM25Score(item, queryTerms, termDocFrequency, totalDocs);
-            scoredItems.add(new ScoredItem(item, score));
+            int matchedTerms = countMatchedTerms(item, queryTerms);
+            scoredItems.add(new ScoredItem(item, score, matchedTerms));
         }
 
-        scoredItems.sort((a, b) -> Double.compare(b.score, a.score));
+        int requiredMatches = queryTerms.size();
+        List<ScoredItem> filtered = new ArrayList<>();
 
-        LOGGER.debug("Reranked {} items with {} query terms", items.size(), queryTerms.size());
+        while (requiredMatches >= 2 && filtered.isEmpty()) {
+            int minMatches = requiredMatches;
+            filtered = scoredItems.stream()
+                    .filter(si -> si.matchedTerms >= minMatches)
+                    .collect(Collectors.toList());
+            
+            if (filtered.isEmpty()) {
+                requiredMatches--;
+            }
+        }
 
-        return scoredItems.stream()
+        if (filtered.isEmpty()) {
+            filtered = scoredItems;
+        }
+
+        filtered.sort((a, b) -> {
+            if (b.matchedTerms != a.matchedTerms) {
+                return Integer.compare(b.matchedTerms, a.matchedTerms);
+            }
+            return Double.compare(b.score, a.score);
+        });
+
+        LOGGER.debug("Progressive filtering: {} query terms, required {} matches, returned {} items",
+                queryTerms.size(), requiredMatches, filtered.size());
+
+        return filtered.stream()
                 .map(si -> si.item)
                 .collect(Collectors.toList());
     }
@@ -201,6 +228,22 @@ public class SearchReranker {
         return sb.toString();
     }
 
+    private static int countMatchedTerms(DiscoveryItem item, List<QueryTerm> queryTerms) {
+        String combinedText = combineFields(item).toLowerCase();
+        if (combinedText.isEmpty()) {
+            return 0;
+        }
+
+        int matchedTerms = 0;
+        for (QueryTerm qTerm : queryTerms) {
+            if (combinedText.contains(qTerm.getTerm().toLowerCase())) {
+                matchedTerms++;
+            }
+        }
+
+        return matchedTerms;
+    }
+
     private static Map<String, Integer> calculateDocFrequencies(List<DiscoveryItem> items, List<QueryTerm> queryTerms) {
         Map<String, Integer> docFreq = new HashMap<>();
 
@@ -234,10 +277,12 @@ public class SearchReranker {
     private static class ScoredItem {
         final DiscoveryItem item;
         final double score;
+        final int matchedTerms;
 
-        ScoredItem(DiscoveryItem item, double score) {
+        ScoredItem(DiscoveryItem item, double score, int matchedTerms) {
             this.item = item;
             this.score = score;
+            this.matchedTerms = matchedTerms;
         }
     }
 }
