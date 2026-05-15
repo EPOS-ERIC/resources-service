@@ -22,6 +22,9 @@ import org.epos.api.beans.SearchResponse;
 import org.epos.api.core.AvailableFormatsBuilder;
 import org.epos.api.core.DataServiceProviderGeneration;
 import org.epos.api.core.EnvironmentVariables;
+import org.epos.api.core.search.SearchQueryProcessor;
+import org.epos.api.core.search.SearchReranker;
+import org.epos.api.core.search.SearchSynonyms;
 import org.epos.api.routines.DatabaseConnections;
 import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.facets.Facets;
@@ -117,6 +120,8 @@ public class FacilitySearchGenerationSQL {
         final long startTime = System.nanoTime();
         LOGGER.info("Initiating facility search (SQL) with parameters: {}", parameters);
 
+        SearchSynonyms.initialize();
+
         EntityManager em = null;
         try {
             em = EntityManagerService.getInstance().createEntityManager();
@@ -169,6 +174,13 @@ public class FacilitySearchGenerationSQL {
             // Also fetch facility-related distributions
             Set<DiscoveryItem> distributionItems = fetchFacilityDistributions(em, parameters, user, statuses, inputGeometry, wktReader);
             discoveryItems.addAll(distributionItems);
+
+            // Apply reranking if free-text query is present
+            String freeTextQuery = (String) parameters.get("q");
+            if (freeTextQuery != null && !freeTextQuery.trim().isEmpty()) {
+                List<DiscoveryItem> rerankedList = SearchReranker.rerank(new ArrayList<>(discoveryItems), freeTextQuery);
+                discoveryItems = new LinkedHashSet<>(rerankedList);
+            }
 
             LOGGER.info("Facility search completed (SQL) in {} ms with {} items",
                     (System.nanoTime() - startTime) / 1_000_000, discoveryItems.size());
@@ -227,6 +239,8 @@ public class FacilitySearchGenerationSQL {
         List<String> equipmentTypes = getListParam(parameters, PARAMETER_EQUIPMENT_TYPES);
         List<String> keywords = getListParam(parameters, "keywords");
         String freeTextQuery = (String) parameters.get("q");
+        
+        List<String> processedSearchTerms = SearchQueryProcessor.getSearchTermsForSQLWithSynonyms(freeTextQuery, new SearchSynonyms());
 
         ctx.sql.append("WITH ");
 
@@ -298,7 +312,7 @@ public class FacilitySearchGenerationSQL {
         ctx.sql.append("  SELECT pf.instance_id FROM published_facilities pf ");
 
         boolean hasFilters = !facilityTypes.isEmpty() || !equipmentTypes.isEmpty() || !keywords.isEmpty() ||
-                (freeTextQuery != null && !freeTextQuery.trim().isEmpty());
+                (processedSearchTerms != null && !processedSearchTerms.isEmpty());
 
         if (!facilityTypes.isEmpty()) {
             String ftParams = nextListParam(ctx, facilityTypes);
@@ -324,9 +338,8 @@ public class FacilitySearchGenerationSQL {
                 ctx.sql.append(" ) ");
             }
 
-            if (freeTextQuery != null && !freeTextQuery.trim().isEmpty()) {
-                String[] tokens = freeTextQuery.split("[\\s,;]+");
-                for (String token : tokens) {
+            if (processedSearchTerms != null && !processedSearchTerms.isEmpty()) {
+                for (String token : processedSearchTerms) {
                     if (!token.trim().isEmpty()) {
                         String tokenParam = nextParam(ctx, "%" + token.trim() + "%");
                         ctx.sql.append(" AND (pf.title ILIKE ").append(tokenParam)

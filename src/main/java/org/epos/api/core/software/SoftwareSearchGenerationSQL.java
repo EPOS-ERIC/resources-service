@@ -20,6 +20,9 @@ import org.epos.api.beans.DiscoveryItem.DiscoveryItemBuilder;
 import org.epos.api.beans.NodeFilters;
 import org.epos.api.beans.SearchResponse;
 import org.epos.api.core.EnvironmentVariables;
+import org.epos.api.core.search.SearchQueryProcessor;
+import org.epos.api.core.search.SearchReranker;
+import org.epos.api.core.search.SearchSynonyms;
 import org.epos.api.enums.AvailableFormatType;
 import org.epos.api.facets.Facets;
 import org.epos.api.facets.FacetsGeneration;
@@ -50,6 +53,10 @@ public class SoftwareSearchGenerationSQL {
         LOGGER.info("Generating software search (SQL) with query {}, status {}, user {}",
                 query, versioningStatus, user != null ? user.getAuthIdentifier() : "public");
 
+        SearchSynonyms.initialize();
+        
+        List<String> processedSearchTerms = SearchQueryProcessor.getSearchTermsForSQLWithSynonyms(query, new SearchSynonyms());
+
         EntityManager em = null;
         try {
             em = EntityManagerService.getInstance().createEntityManager();
@@ -66,7 +73,7 @@ public class SoftwareSearchGenerationSQL {
             }
 
             // Fetch software source codes
-            List<Object[]> sourceCodeResults = fetchSoftwareSourceCodes(em, query, statuses, user, versioningStatus);
+            List<Object[]> sourceCodeResults = fetchSoftwareSourceCodes(em, processedSearchTerms, statuses, user, versioningStatus);
             for (Object[] row : sourceCodeResults) {
                 DiscoveryItem item = mapSourceCodeToDiscoveryItem(row, user, versioningStatus);
                 if (item != null) {
@@ -76,7 +83,7 @@ public class SoftwareSearchGenerationSQL {
             }
 
             // Fetch software applications
-            List<Object[]> applicationResults = fetchSoftwareApplications(em, query, statuses, user, versioningStatus);
+            List<Object[]> applicationResults = fetchSoftwareApplications(em, processedSearchTerms, statuses, user, versioningStatus);
             for (Object[] row : applicationResults) {
                 DiscoveryItem item = mapApplicationToDiscoveryItem(row, user, versioningStatus);
                 if (item != null) {
@@ -86,12 +93,19 @@ public class SoftwareSearchGenerationSQL {
             }
 
             // Fetch distributions with software categories
-            List<Object[]> distributionResults = fetchSoftwareDistributions(em, query, statuses, user, versioningStatus);
+            List<Object[]> distributionResults = fetchSoftwareDistributions(em, processedSearchTerms, statuses, user, versioningStatus);
             for (Object[] row : distributionResults) {
                 DiscoveryItem item = mapDistributionToDiscoveryItem(row, user, versioningStatus);
                 if (item != null) {
                     discoveryItems.add(item);
                 }
+            }
+
+            // Apply reranking if query is present
+            if (query != null && !query.trim().isEmpty()) {
+                List<DiscoveryItem> itemList = new ArrayList<>(discoveryItems);
+                itemList = SearchReranker.rerank(itemList, query);
+                discoveryItems = new LinkedHashSet<>(itemList);
             }
 
             SearchResponse response = buildSearchResponse(discoveryItems, keywords);
@@ -111,8 +125,8 @@ public class SoftwareSearchGenerationSQL {
         }
     }
 
-    private static List<Object[]> fetchSoftwareSourceCodes(EntityManager em, String query, List<String> statuses,
-                                                            User user, String versioningStatus) {
+    private static List<Object[]> fetchSoftwareSourceCodes(EntityManager em, List<String> processedSearchTerms, List<String> statuses,
+                                                             User user, String versioningStatus) {
         StringBuilder sql = new StringBuilder();
         Map<Integer, Object> params = new HashMap<>();
         int paramIndex = 1;
@@ -147,11 +161,19 @@ public class SoftwareSearchGenerationSQL {
         sql.append("LEFT JOIN source_code_categories scc ON scb.instance_id = scc.instance_id ");
 
         // Apply free text query filter with parameterized query
-        if (query != null && !query.trim().isEmpty()) {
-            sql.append("WHERE (scb.name ILIKE ?").append(paramIndex);
-            params.put(paramIndex++, "%" + query.trim() + "%");
-            sql.append("    OR scb.description ILIKE ?").append(paramIndex);
-            params.put(paramIndex++, "%" + query.trim() + "%");
+        if (processedSearchTerms != null && !processedSearchTerms.isEmpty()) {
+            sql.append("WHERE (");
+            for (int i = 0; i < processedSearchTerms.size(); i++) {
+                if (i > 0) sql.append(" OR ");
+                sql.append("scb.name ILIKE ?").append(paramIndex);
+                params.put(paramIndex++, "%" + processedSearchTerms.get(i) + "%");
+            }
+            sql.append("    OR ");
+            for (int i = 0; i < processedSearchTerms.size(); i++) {
+                if (i > 0) sql.append(" OR ");
+                sql.append("scb.description ILIKE ?").append(paramIndex);
+                params.put(paramIndex++, "%" + processedSearchTerms.get(i) + "%");
+            }
             sql.append(") ");
         }
 
@@ -168,8 +190,8 @@ public class SoftwareSearchGenerationSQL {
         return results;
     }
 
-    private static List<Object[]> fetchSoftwareApplications(EntityManager em, String query, List<String> statuses,
-                                                             User user, String versioningStatus) {
+    private static List<Object[]> fetchSoftwareApplications(EntityManager em, List<String> processedSearchTerms, List<String> statuses,
+                                                              User user, String versioningStatus) {
         StringBuilder sql = new StringBuilder();
         Map<Integer, Object> params = new HashMap<>();
         int paramIndex = 1;
@@ -204,11 +226,19 @@ public class SoftwareSearchGenerationSQL {
         sql.append("LEFT JOIN application_categories ac ON ab.instance_id = ac.instance_id ");
 
         // Apply free text query filter with parameterized query
-        if (query != null && !query.trim().isEmpty()) {
-            sql.append("WHERE (ab.name ILIKE ?").append(paramIndex);
-            params.put(paramIndex++, "%" + query.trim() + "%");
-            sql.append("    OR ab.description ILIKE ?").append(paramIndex);
-            params.put(paramIndex++, "%" + query.trim() + "%");
+        if (processedSearchTerms != null && !processedSearchTerms.isEmpty()) {
+            sql.append("WHERE (");
+            for (int i = 0; i < processedSearchTerms.size(); i++) {
+                if (i > 0) sql.append(" OR ");
+                sql.append("ab.name ILIKE ?").append(paramIndex);
+                params.put(paramIndex++, "%" + processedSearchTerms.get(i) + "%");
+            }
+            sql.append("    OR ");
+            for (int i = 0; i < processedSearchTerms.size(); i++) {
+                if (i > 0) sql.append(" OR ");
+                sql.append("ab.description ILIKE ?").append(paramIndex);
+                params.put(paramIndex++, "%" + processedSearchTerms.get(i) + "%");
+            }
             sql.append(") ");
         }
 
@@ -225,8 +255,8 @@ public class SoftwareSearchGenerationSQL {
         return results;
     }
 
-    private static List<Object[]> fetchSoftwareDistributions(EntityManager em, String query, List<String> statuses,
-                                                              User user, String versioningStatus) {
+    private static List<Object[]> fetchSoftwareDistributions(EntityManager em, List<String> processedSearchTerms, List<String> statuses,
+                                                               User user, String versioningStatus) {
         StringBuilder sql = new StringBuilder();
         Map<Integer, Object> params = new HashMap<>();
         int paramIndex = 1;
@@ -280,11 +310,19 @@ public class SoftwareSearchGenerationSQL {
         sql.append("LEFT JOIN dist_descriptions dd ON sd.instance_id = dd.distribution_instance_id ");
 
         // Apply free text query filter with parameterized query
-        if (query != null && !query.trim().isEmpty()) {
-            sql.append("WHERE (COALESCE(dt.title, '') ILIKE ?").append(paramIndex);
-            params.put(paramIndex++, "%" + query.trim() + "%");
-            sql.append("    OR COALESCE(dd.description, '') ILIKE ?").append(paramIndex);
-            params.put(paramIndex++, "%" + query.trim() + "%");
+        if (processedSearchTerms != null && !processedSearchTerms.isEmpty()) {
+            sql.append("WHERE (");
+            for (int i = 0; i < processedSearchTerms.size(); i++) {
+                if (i > 0) sql.append(" OR ");
+                sql.append("COALESCE(dt.title, '') ILIKE ?").append(paramIndex);
+                params.put(paramIndex++, "%" + processedSearchTerms.get(i) + "%");
+            }
+            sql.append("    OR ");
+            for (int i = 0; i < processedSearchTerms.size(); i++) {
+                if (i > 0) sql.append(" OR ");
+                sql.append("COALESCE(dd.description, '') ILIKE ?").append(paramIndex);
+                params.put(paramIndex++, "%" + processedSearchTerms.get(i) + "%");
+            }
             sql.append(") ");
         }
 

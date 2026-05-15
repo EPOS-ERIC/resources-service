@@ -12,6 +12,10 @@ import metadataapis.EntityNames;
 import org.epos.api.beans.DataServiceProvider;
 import org.epos.api.core.DataServiceProviderGeneration;
 import org.epos.api.core.PreFetchedEntities;
+import org.epos.api.core.search.SearchQueryProcessor;
+import org.epos.api.core.search.SearchReranker;
+import org.epos.api.core.search.SearchSynonyms;
+import org.epos.api.core.search.TextSimilarityScorer;
 import org.epos.api.routines.DatabaseConnections;
 import org.epos.api.utility.BBoxToPolygon;
 import org.epos.eposdatamodel.*;
@@ -42,6 +46,8 @@ public class DistributionFilterSearch {
     private static final String PARAMETER__SERVICE_TYPE = "servicetypes";
 
     public static List<DataProduct> doFilters(List<DataProduct> datasetList, Map<String, Object> parameters) {
+        SearchSynonyms.initialize();
+        
         // Pre-fetch all linked entities at once to avoid N+1 queries
         PreFetchedEntities preFetched = preFetchLinkedEntities(datasetList, parameters);
 
@@ -515,14 +521,18 @@ public class DistributionFilterSearch {
      * Filter by full text search - OPTIMIZED with pre-fetched data and parallel processing
      */
     private static List<DataProduct> filterByFullText(List<DataProduct> datasetList,
-                                                      Map<String, Object> parameters,
-                                                      PreFetchedEntities preFetched) {
+                                                       Map<String, Object> parameters,
+                                                       PreFetchedEntities preFetched) {
         if (!parameters.containsKey("q")) {
             return datasetList;
         }
 
-        Set<String> searchTerms = new HashSet<>(
-                Arrays.asList(parameters.get("q").toString().toLowerCase().split(",")));
+        String originalQuery = parameters.get("q").toString();
+        List<String> searchTerms = SearchQueryProcessor.processQueryWithSynonyms(originalQuery, new SearchSynonyms());
+        
+        if (searchTerms.isEmpty()) {
+            return datasetList;
+        }
 
         Set<DataProduct> tempDatasetList = ConcurrentHashMap.newKeySet();
         boolean useParallel = datasetList.size() > 100;
@@ -531,7 +541,6 @@ public class DistributionFilterSearch {
             Map<String, Boolean> qSMap = searchTerms.stream()
                     .collect(Collectors.toMap(key -> key, value -> Boolean.FALSE));
 
-            // Check keywords
             if (edmDataproduct.getKeywords() != null) {
                 List<String> dataproductKeywords = Arrays.stream(edmDataproduct.getKeywords().split(","))
                         .map(String::toLowerCase)
@@ -541,11 +550,17 @@ public class DistributionFilterSearch {
                 qSMap.keySet().forEach(q -> {
                     if (dataproductKeywords.contains(q)) {
                         qSMap.put(q, Boolean.TRUE);
+                    } else {
+                        for (String keyword : dataproductKeywords) {
+                            if (TextSimilarityScorer.calculateSimilarity(q, keyword) > 0.0) {
+                                qSMap.put(q, Boolean.TRUE);
+                                break;
+                            }
+                        }
                     }
                 });
             }
 
-            // Check UID
             if (edmDataproduct.getUid() != null) {
                 qSMap.keySet().forEach(q -> {
                     if (edmDataproduct.getUid().toLowerCase().contains(q)) {
@@ -554,7 +569,6 @@ public class DistributionFilterSearch {
                 });
             }
 
-            // Check identifiers
             if (edmDataproduct.getIdentifier() != null && !edmDataproduct.getIdentifier().isEmpty()) {
                 edmDataproduct.getIdentifier().forEach(linkedEntity -> {
                     Identifier edmIdentifier = (Identifier) preFetched.identifiers.get(linkedEntity.getInstanceId());
@@ -570,12 +584,10 @@ public class DistributionFilterSearch {
                 });
             }
 
-            // Check distributions
             if (edmDataproduct.getDistribution() != null && !edmDataproduct.getDistribution().isEmpty()) {
                 edmDataproduct.getDistribution().forEach(edmDistributionLe -> {
                     Distribution edmDistribution = (Distribution) preFetched.distributions.get(edmDistributionLe.getInstanceId());
                     if (edmDistribution != null) {
-                        // Distribution title
                         if (edmDistribution.getTitle() != null) {
                             edmDistribution.getTitle().forEach(title -> {
                                 qSMap.keySet().forEach(q -> {
@@ -586,7 +598,6 @@ public class DistributionFilterSearch {
                             });
                         }
 
-                        // Distribution UID
                         if (edmDistribution.getUid() != null) {
                             qSMap.keySet().forEach(q -> {
                                 if (edmDistribution.getUid().toLowerCase().contains(q)) {
@@ -595,7 +606,6 @@ public class DistributionFilterSearch {
                             });
                         }
 
-                        // Distribution description
                         if (edmDistribution.getDescription() != null) {
                             edmDistribution.getDescription().forEach(description -> {
                                 qSMap.keySet().forEach(q -> {
@@ -606,7 +616,6 @@ public class DistributionFilterSearch {
                             });
                         }
 
-                        // Webservices
                         if (edmDistribution.getAccessService() != null) {
                             edmDistribution.getAccessService().forEach(accessService -> {
                                 WebService edmWebservice = (WebService) preFetched.webServices.get(accessService.getInstanceId());

@@ -8,6 +8,9 @@ import abstractapis.AbstractAPI;
 import commonapis.LinkedEntityAPI;
 import metadataapis.EntityNames;
 import org.epos.api.core.PreFetchedEntities;
+import org.epos.api.core.search.SearchQueryProcessor;
+import org.epos.api.core.search.SearchSynonyms;
+import org.epos.api.core.search.TextSimilarityScorer;
 import org.epos.api.routines.DatabaseConnections;
 import org.epos.eposdatamodel.Address;
 import org.epos.eposdatamodel.Identifier;
@@ -28,6 +31,8 @@ public class OrganizationFilterSearch {
     private static final Logger LOGGER = LoggerFactory.getLogger(OrganizationFilterSearch.class);
 
     public static List<Organization> doFilters(List<Organization> organisationsList, Map<String, Object> parameters) {
+        SearchSynonyms.initialize();
+        
         // Pre-fetch all linked entities at once
         PreFetchedEntities preFetched = preFetchLinkedEntities(organisationsList);
 
@@ -96,8 +101,12 @@ public class OrganizationFilterSearch {
             return organisationsList;
         }
 
-        String[] qs = parameters.get("q").toString().toLowerCase().split(",");
-        Set<String> searchTerms = new HashSet<>(Arrays.asList(qs));
+        String originalQuery = parameters.get("q").toString();
+        List<String> searchTerms = SearchQueryProcessor.processQueryWithSynonyms(originalQuery, new SearchSynonyms());
+        
+        if (searchTerms.isEmpty()) {
+            return organisationsList;
+        }
 
         Set<Organization> tempDatasetList = ConcurrentHashMap.newKeySet();
         boolean useParallel = organisationsList.size() > 100;
@@ -106,7 +115,6 @@ public class OrganizationFilterSearch {
             Map<String, Boolean> qSMap = searchTerms.stream()
                     .collect(Collectors.toMap(key -> key, value -> Boolean.FALSE));
 
-            // Check legal name
             if (edmOrganisation.getLegalName() != null && !edmOrganisation.getLegalName().isEmpty()) {
                 edmOrganisation.getLegalName().forEach(title -> {
                     qSMap.keySet().forEach(q -> {
@@ -117,7 +125,6 @@ public class OrganizationFilterSearch {
                 });
             }
 
-            // Check identifiers - using pre-fetched data
             if (edmOrganisation.getIdentifier() != null) {
                 edmOrganisation.getIdentifier().forEach(identifierLe -> {
                     Identifier identifier = (Identifier) preFetched.identifiers.get(identifierLe.getInstanceId());
@@ -140,7 +147,6 @@ public class OrganizationFilterSearch {
                 });
             }
 
-            // Check UID
             if (edmOrganisation.getUid() != null) {
                 qSMap.keySet().forEach(q -> {
                     if (edmOrganisation.getUid().toLowerCase().contains(q)) {
@@ -149,7 +155,6 @@ public class OrganizationFilterSearch {
                 });
             }
 
-            // Add if all search terms are satisfied
             if (qSMap.values().stream().allMatch(b -> b)) {
                 tempDatasetList.add(edmOrganisation);
             }
