@@ -20,6 +20,7 @@ import org.epos.api.beans.DiscoveryItem.DiscoveryItemBuilder;
 import org.epos.api.beans.NodeFilters;
 import org.epos.api.beans.SearchResponse;
 import org.epos.api.core.EnvironmentVariables;
+import org.epos.api.core.search.QueryTerm;
 import org.epos.api.core.search.SearchQueryProcessor;
 import org.epos.api.core.search.SearchReranker;
 import org.epos.api.core.search.SearchSynonyms;
@@ -55,7 +56,10 @@ public class SoftwareSearchGenerationSQL {
 
         SearchSynonyms.initialize();
         
-        List<String> processedSearchTerms = SearchQueryProcessor.getSearchTermsForSQLWithSynonyms(query, new SearchSynonyms());
+        List<QueryTerm> analyzedTerms = SearchQueryProcessor.getAnalyzedTermsWithSynonyms(query, new SearchSynonyms());
+        List<String> processedSearchTerms = analyzedTerms.stream()
+                .map(QueryTerm::getTerm)
+                .collect(Collectors.toList());
 
         EntityManager em = null;
         try {
