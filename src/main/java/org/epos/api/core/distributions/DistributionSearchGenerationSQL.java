@@ -553,7 +553,7 @@ public class DistributionSearchGenerationSQL {
         Timestamp startDate = parseDateParam(parameters.get("schema:startDate"));
         Timestamp endDate = parseDateParam(parameters.get("schema:endDate"));
 
-        ctx.sql.append("WITH ");
+        ctx.sql.append("WITH RECURSIVE ");
 
         String organizationParams = "";
         if (!organizations.isEmpty()) {

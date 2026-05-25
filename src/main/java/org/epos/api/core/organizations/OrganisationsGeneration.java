@@ -94,27 +94,8 @@ public class OrganisationsGeneration {
                 organisations = tempOrganizationList;
             }
 
-            System.out.println(organisations.size());
-
             LOGGER.info("Apply filter using input parameters: "+parameters.toString());
             organisations = OrganizationFilterSearch.doFilters(organisations, parameters);
-
-            System.out.println(organisations.size());
-
-
-
-            if(parameters.containsKey("country")){
-                List<Organization> tempOrganizationList = new ArrayList<>();
-                for(Organization e : organisations) {
-                    if(e.getAddress()!=null){
-                        Address address = (Address) LinkedEntityAPI.retrieveFromLinkedEntity(e.getAddress());
-                        if(Objects.nonNull(address) && address.getCountry().equals(parameters.get("country"))){
-                            tempOrganizationList.add(e);
-                        }
-                    }
-                }
-                organisations = tempOrganizationList;
-            }
         }
 
         List<OrganizationBean> organisationsReturn = new ArrayList<OrganizationBean>();
