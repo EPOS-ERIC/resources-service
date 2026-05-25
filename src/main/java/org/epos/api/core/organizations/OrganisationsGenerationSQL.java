@@ -87,13 +87,12 @@ public class OrganisationsGenerationSQL {
                     sql.append("), related_organizations AS (")
                             .append("SELECT so.instance_id FROM seed_organizations so ")
                             .append("UNION ALL ")
-                            .append("SELECT om.organization2_instance_id AS instance_id ")
+                            .append("SELECT CASE ")
+                            .append("WHEN om.organization1_instance_id = ro.instance_id THEN om.organization2_instance_id ")
+                            .append("ELSE om.organization1_instance_id END AS instance_id ")
                             .append("FROM metadata_catalogue.organization_memberof om ")
-                            .append("JOIN related_organizations ro ON om.organization1_instance_id = ro.instance_id ")
-                            .append("UNION ALL ")
-                            .append("SELECT om.organization1_instance_id AS instance_id ")
-                            .append("FROM metadata_catalogue.organization_memberof om ")
-                            .append("JOIN related_organizations ro ON om.organization2_instance_id = ro.instance_id ")
+                            .append("JOIN related_organizations ro ")
+                            .append("ON om.organization1_instance_id = ro.instance_id OR om.organization2_instance_id = ro.instance_id ")
                             .append(") SELECT DISTINCT instance_id FROM related_organizations) ");
                 }
             }
