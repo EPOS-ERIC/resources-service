@@ -64,21 +64,37 @@ public class OrganisationsGenerationSQL {
                 boolean hasServiceProviders = tokens.contains("serviceproviders");
 
                 if (hasDataProviders || hasServiceProviders) {
-                    sql.append("AND (");
+                    sql.append("AND o.instance_id IN (")
+                            .append("WITH RECURSIVE seed_organizations AS (");
+
                     boolean hasPrevious = false;
                     if (hasDataProviders) {
-                        sql.append("EXISTS (SELECT 1 FROM metadata_catalogue.dataproduct_publisher dpp ")
-                                .append("WHERE dpp.organization_instance_id = o.instance_id)");
+                        sql.append("SELECT DISTINCT dpp.organization_instance_id AS instance_id ")
+                                .append("FROM metadata_catalogue.distribution_dataproduct ddp ")
+                                .append("JOIN metadata_catalogue.dataproduct_publisher dpp ON ddp.dataproduct_instance_id = dpp.dataproduct_instance_id ");
                         hasPrevious = true;
                     }
                     if (hasServiceProviders) {
                         if (hasPrevious) {
-                            sql.append(" OR ");
+                            sql.append("UNION ");
                         }
-                        sql.append("EXISTS (SELECT 1 FROM metadata_catalogue.webservice ws ")
-                                .append("WHERE ws.provider = o.instance_id)");
+                        sql.append("SELECT DISTINCT ws.provider AS instance_id ")
+                                .append("FROM metadata_catalogue.webservice_distribution wd ")
+                                .append("JOIN metadata_catalogue.webservice ws ON wd.webservice_instance_id = ws.instance_id ")
+                                .append("WHERE ws.provider IS NOT NULL ");
                     }
-                    sql.append(") ");
+
+                    sql.append("), related_organizations AS (")
+                            .append("SELECT so.instance_id FROM seed_organizations so ")
+                            .append("UNION ")
+                            .append("SELECT om.organization2_instance_id AS instance_id ")
+                            .append("FROM metadata_catalogue.organization_memberof om ")
+                            .append("JOIN related_organizations ro ON om.organization1_instance_id = ro.instance_id ")
+                            .append("UNION ")
+                            .append("SELECT om.organization1_instance_id AS instance_id ")
+                            .append("FROM metadata_catalogue.organization_memberof om ")
+                            .append("JOIN related_organizations ro ON om.organization2_instance_id = ro.instance_id ")
+                            .append(") SELECT DISTINCT instance_id FROM related_organizations) ");
                 }
             }
 
