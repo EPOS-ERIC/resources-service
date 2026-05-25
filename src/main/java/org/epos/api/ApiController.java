@@ -110,11 +110,7 @@ abstract class ApiController<T> {
 			response = Utils.gson.toJson(MonitoringGeneration.generate());
 			break;
 		case "ORGANISATIONS":
-			if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
-				response = Utils.gson.toJson(OrganisationsGenerationSQL.generate(requestParams));
-			} else {
-				response = Utils.gson.toJson(OrganisationsGeneration.generate(requestParams));
-			}
+			response = Utils.gson.toJson(OrganisationsGenerationSQL.generate(requestParams));
 			break;
 		default:
 			break;

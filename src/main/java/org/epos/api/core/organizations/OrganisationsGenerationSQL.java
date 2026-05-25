@@ -100,6 +100,7 @@ public class OrganisationsGenerationSQL {
             sql.append("ORDER BY o.legalname");
 
             Query query = em.createNativeQuery(sql.toString());
+            query.setHint("jakarta.persistence.query.timeout", 15000);
             for (int i = 0; i < params.size(); i++) {
                 query.setParameter(i + 1, params.get(i));
             }
