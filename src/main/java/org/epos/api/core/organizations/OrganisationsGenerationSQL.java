@@ -86,11 +86,11 @@ public class OrganisationsGenerationSQL {
 
                     sql.append("), related_organizations AS (")
                             .append("SELECT so.instance_id FROM seed_organizations so ")
-                            .append("UNION ")
+                            .append("UNION ALL ")
                             .append("SELECT om.organization2_instance_id AS instance_id ")
                             .append("FROM metadata_catalogue.organization_memberof om ")
                             .append("JOIN related_organizations ro ON om.organization1_instance_id = ro.instance_id ")
-                            .append("UNION ")
+                            .append("UNION ALL ")
                             .append("SELECT om.organization1_instance_id AS instance_id ")
                             .append("FROM metadata_catalogue.organization_memberof om ")
                             .append("JOIN related_organizations ro ON om.organization2_instance_id = ro.instance_id ")
