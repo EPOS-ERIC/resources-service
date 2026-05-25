@@ -65,7 +65,7 @@ public class OrganisationsGenerationSQL {
 
                 if (hasDataProviders || hasServiceProviders) {
                     sql.append("AND o.instance_id IN (")
-                            .append("WITH RECURSIVE seed_organizations AS (");
+                            .append("WITH seed_organizations AS (");
 
                     boolean hasPrevious = false;
                     if (hasDataProviders) {
@@ -86,13 +86,13 @@ public class OrganisationsGenerationSQL {
 
                     sql.append("), related_organizations AS (")
                             .append("SELECT so.instance_id FROM seed_organizations so ")
-                            .append("UNION ALL ")
+                            .append("UNION ")
                             .append("SELECT CASE ")
-                            .append("WHEN om.organization1_instance_id = ro.instance_id THEN om.organization2_instance_id ")
+                            .append("WHEN om.organization1_instance_id = so.instance_id THEN om.organization2_instance_id ")
                             .append("ELSE om.organization1_instance_id END AS instance_id ")
                             .append("FROM metadata_catalogue.organization_memberof om ")
-                            .append("JOIN related_organizations ro ")
-                            .append("ON om.organization1_instance_id = ro.instance_id OR om.organization2_instance_id = ro.instance_id ")
+                            .append("JOIN seed_organizations so ")
+                            .append("ON om.organization1_instance_id = so.instance_id OR om.organization2_instance_id = so.instance_id ")
                             .append(") SELECT DISTINCT instance_id FROM related_organizations) ");
                 }
             }

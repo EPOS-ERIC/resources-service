@@ -583,18 +583,15 @@ public class DistributionSearchGenerationSQL {
                     .append("WHERE o.instance_id IN ").append(organizationParams)
                     .append(" OR o.legalname IN ").append(organizationParams)
                     .append("), ")
-                    .append("recursive_organizations AS ( ")
+                    .append("expanded_organizations AS ( ")
                     .append("SELECT so.instance_id FROM selected_organizations so ")
-                    .append("UNION ALL ")
+                    .append("UNION ")
                     .append("SELECT CASE ")
-                    .append("WHEN om.organization1_instance_id = ro.instance_id THEN om.organization2_instance_id ")
+                    .append("WHEN om.organization1_instance_id = so.instance_id THEN om.organization2_instance_id ")
                     .append("ELSE om.organization1_instance_id END AS instance_id ")
                     .append("FROM metadata_catalogue.organization_memberof om ")
-                    .append("JOIN recursive_organizations ro ")
-                    .append("ON om.organization1_instance_id = ro.instance_id OR om.organization2_instance_id = ro.instance_id ")
-                    .append("), ")
-                    .append("expanded_organizations AS ( ")
-                    .append("SELECT DISTINCT ro.instance_id FROM recursive_organizations ro ")
+                    .append("JOIN selected_organizations so ")
+                    .append("ON om.organization1_instance_id = so.instance_id OR om.organization2_instance_id = so.instance_id ")
                     .append("), ");
         }
 
