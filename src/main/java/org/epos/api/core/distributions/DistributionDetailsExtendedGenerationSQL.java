@@ -523,19 +523,29 @@ public class DistributionDetailsExtendedGenerationSQL {
         // Keywords
         parseKeywords(distribution, keywords, wsKeywords);
 
+        Organization webserviceProviderOrg = parseProviderOrganization(wsProviderJson);
+        List<Organization> dataproductPublishers = parsePublishers(dpPublishersJson);
+        List<Organization> providerLookupOrgs = new ArrayList<>(dataproductPublishers);
+        if (webserviceProviderOrg != null) {
+            providerLookupOrgs.add(webserviceProviderOrg);
+        }
+        Map<String, DataServiceProvider> providersByInstanceId = getProvidersByInstanceId(providerLookupOrgs);
+
         // Build DataProduct bean
         if (dataproductId != null) {
             DataProduct dataproduct = buildDataProduct(dataproductId, dpMetaId, dpUid, dpType, dpVersion,
-                    dpIdentifiersJson, dpSpatial, dpStartDate, dpEndDate, dpPublishersJson,
-                    dpCategoriesJson, dpContactpointsJson, dpProvenanceJson, accessRight);
+                    dpIdentifiersJson, dpSpatial, dpStartDate, dpEndDate,
+                    dpCategoriesJson, dpContactpointsJson, dpProvenanceJson, accessRight,
+                    dataproductPublishers, providersByInstanceId);
             distribution.getRelatedDataProducts().add(dataproduct);
         }
 
         // Build WebService bean
         if (webserviceId != null) {
             Webservice webservice = buildWebservice(wsName, wsDescription, wsDocumentation,
-                    wsProviderJson, wsSpatial, wsTemporalsJson, wsServiceTypesJson,
-                    wsContactpointsJson, wsOperationsJson, distOperationIds);
+                    wsSpatial, wsTemporalsJson, wsServiceTypesJson,
+                    wsContactpointsJson, wsOperationsJson, distOperationIds,
+                    webserviceProviderOrg, providersByInstanceId);
             distribution.getRelatedWebservice().add(webservice);
         }
 
@@ -605,8 +615,10 @@ public class DistributionDetailsExtendedGenerationSQL {
 
     private static DataProduct buildDataProduct(String id, String metaId, String uid, String type, String version,
                                                 String identifiersJson, String spatial, Timestamp startDate, Timestamp endDate,
-                                                String publishersJson, String categoriesJson, String contactpointsJson,
-                                                String provenanceJson, String accessRight) {
+                                                String categoriesJson, String contactpointsJson,
+                                                String provenanceJson, String accessRight,
+                                                List<Organization> publishers,
+                                                Map<String, DataServiceProvider> providersByInstanceId) {
         DataProduct dataproduct = new DataProduct();
         dataproduct.setId(id);
         dataproduct.setUid(uid);
@@ -666,9 +678,13 @@ public class DistributionDetailsExtendedGenerationSQL {
         dataproduct.setTemporalCoverage(List.of(tc));
 
         // Data providers
-        List<Organization> publishers = parsePublishers(publishersJson);
         if (!publishers.isEmpty()) {
-            dataproduct.setDataProvider(DataServiceProviderGenerationSQL.getProviders(publishers));
+            List<DataServiceProvider> dataProviders = publishers.stream()
+                    .map(Organization::getInstanceId)
+                    .map(providersByInstanceId::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            dataproduct.setDataProvider(dataProviders);
         }
 
         // Contact points
@@ -731,33 +747,21 @@ public class DistributionDetailsExtendedGenerationSQL {
     }
 
     private static Webservice buildWebservice(String name, String description, String documentation,
-                                              String providerJson, String spatial, String temporalsJson,
+                                              String spatial, String temporalsJson,
                                               String serviceTypesJson, String contactpointsJson,
-                                              String operationsJson, List<String> distOperationIds) {
+                                              String operationsJson, List<String> distOperationIds,
+                                              Organization providerOrg,
+                                              Map<String, DataServiceProvider> providersByInstanceId) {
         Webservice webservice = new Webservice();
         webservice.setName(name);
         webservice.setDescription(description);
         webservice.setDocumentation(extractDocumentationUri(documentation));
 
         // Provider
-        if (!isEmptyJson(providerJson) && !"{}".equals(providerJson)) {
-            try {
-                JsonNode node = OBJECT_MAPPER.readTree(providerJson);
-                Organization org = new Organization();
-                org.setInstanceId(getTextOrNull(node, "instance_id"));
-                String legalName = getTextOrNull(node, "legal_name");
-                if (legalName != null) {
-                    org.setLegalName(Collections.singletonList(legalName));
-                }
-                org.setURL(getTextOrNull(node, "url"));
-                org.setLogo(getTextOrNull(node, "logo"));
-
-                List<DataServiceProvider> providers = DataServiceProviderGenerationSQL.getProviders(List.of(org));
-                if (!providers.isEmpty()) {
-                    webservice.setProvider(providers.get(0));
-                }
-            } catch (JsonProcessingException e) {
-                LOGGER.warn("Failed to parse provider: {}", e.getMessage());
+        if (providerOrg != null && providerOrg.getInstanceId() != null) {
+            DataServiceProvider provider = providersByInstanceId.get(providerOrg.getInstanceId());
+            if (provider != null) {
+                webservice.setProvider(provider);
             }
         }
 
@@ -944,6 +948,43 @@ public class DistributionDetailsExtendedGenerationSQL {
         }
 
         return organizations;
+    }
+
+    private static Organization parseProviderOrganization(String providerJson) {
+        if (isEmptyJson(providerJson) || "{}".equals(providerJson)) {
+            return null;
+        }
+
+        try {
+            JsonNode node = OBJECT_MAPPER.readTree(providerJson);
+            Organization org = new Organization();
+            org.setInstanceId(getTextOrNull(node, "instance_id"));
+            String legalName = getTextOrNull(node, "legal_name");
+            if (legalName != null) {
+                org.setLegalName(Collections.singletonList(legalName));
+            }
+            org.setURL(getTextOrNull(node, "url"));
+            org.setLogo(getTextOrNull(node, "logo"));
+            return org;
+        } catch (JsonProcessingException e) {
+            LOGGER.warn("Failed to parse provider: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private static Map<String, DataServiceProvider> getProvidersByInstanceId(List<Organization> organizations) {
+        if (organizations == null || organizations.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<DataServiceProvider> providers = DataServiceProviderGenerationSQL.getProviders(organizations);
+        Map<String, DataServiceProvider> providersById = new HashMap<>(providers.size());
+        for (DataServiceProvider provider : providers) {
+            if (provider.getInstanceid() != null) {
+                providersById.put(provider.getInstanceid(), provider);
+            }
+        }
+        return providersById;
     }
 
     private static void buildCategories(DistributionExtended distribution, String instanceId, String uid,

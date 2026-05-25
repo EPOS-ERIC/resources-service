@@ -503,10 +503,23 @@ public class DistributionDetailsGenerationSQL {
         // Temporal coverage
         parseTemporalCoverage(distribution, dpStartDate, dpEndDate);
 
+        Organization serviceProviderOrg = parseProviderOrganization(wsProviderJson);
+
         // Data providers
         List<Organization> publishers = parsePublishers(dpPublishersJson);
+        List<Organization> providerLookupOrgs = new ArrayList<>(publishers);
+        if (serviceProviderOrg != null) {
+            providerLookupOrgs.add(serviceProviderOrg);
+        }
+
+        Map<String, DataServiceProvider> providersByInstanceId = getProvidersByInstanceId(providerLookupOrgs);
         if (!publishers.isEmpty()) {
-            distribution.setDataProvider(DataServiceProviderGenerationSQL.getProviders(publishers));
+            List<DataServiceProvider> dataProviders = publishers.stream()
+                    .map(Organization::getInstanceId)
+                    .map(providersByInstanceId::get)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            distribution.setDataProvider(dataProviders);
         }
 
         // Science domains
@@ -519,7 +532,7 @@ public class DistributionDetailsGenerationSQL {
             distribution.setServiceDocumentation(extractDocumentationUri(wsDocumentation));
 
             // Service provider
-            parseServiceProvider(distribution, wsProviderJson);
+            parseServiceProvider(distribution, serviceProviderOrg, providersByInstanceId);
 
             // Service spatial
             parseServiceSpatial(distribution, wsSpatial);
@@ -689,9 +702,21 @@ public class DistributionDetailsGenerationSQL {
         distribution.setScienceDomain(scienceDomains);
     }
 
-    private static void parseServiceProvider(Distribution distribution, String providerJson) {
-        if (isEmptyJson(providerJson) || "{}".equals(providerJson)) {
+    private static void parseServiceProvider(Distribution distribution, Organization providerOrg,
+                                             Map<String, DataServiceProvider> providersByInstanceId) {
+        if (providerOrg == null || providerOrg.getInstanceId() == null) {
             return;
+        }
+
+        DataServiceProvider provider = providersByInstanceId.get(providerOrg.getInstanceId());
+        if (provider != null) {
+            distribution.setServiceProvider(provider);
+        }
+    }
+
+    private static Organization parseProviderOrganization(String providerJson) {
+        if (isEmptyJson(providerJson) || "{}".equals(providerJson)) {
+            return null;
         }
 
         try {
@@ -704,14 +729,26 @@ public class DistributionDetailsGenerationSQL {
             }
             org.setURL(getTextOrNull(node, "url"));
             org.setLogo(getTextOrNull(node, "logo"));
-
-            List<DataServiceProvider> providers = DataServiceProviderGenerationSQL.getProviders(List.of(org));
-            if (!providers.isEmpty()) {
-                distribution.setServiceProvider(providers.get(0));
-            }
+            return org;
         } catch (JsonProcessingException e) {
             LOGGER.warn("Failed to parse provider JSON: {}", e.getMessage());
+            return null;
         }
+    }
+
+    private static Map<String, DataServiceProvider> getProvidersByInstanceId(List<Organization> organizations) {
+        if (organizations == null || organizations.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<DataServiceProvider> providers = DataServiceProviderGenerationSQL.getProviders(organizations);
+        Map<String, DataServiceProvider> providersById = new HashMap<>(providers.size());
+        for (DataServiceProvider provider : providers) {
+            if (provider.getInstanceid() != null) {
+                providersById.put(provider.getInstanceid(), provider);
+            }
+        }
+        return providersById;
     }
 
     private static void parseServiceSpatial(Distribution distribution, String spatialStr) {

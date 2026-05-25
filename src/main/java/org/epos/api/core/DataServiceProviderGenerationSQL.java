@@ -3,6 +3,9 @@ package org.epos.api.core;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 
@@ -25,6 +28,7 @@ import org.slf4j.LoggerFactory;
 public class DataServiceProviderGenerationSQL {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DataServiceProviderGenerationSQL.class);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     /**
      * Convert Organization entities to DataServiceProvider objects using pure SQL.
@@ -44,6 +48,7 @@ public class DataServiceProviderGenerationSQL {
                 .filter(Objects::nonNull)
                 .map(Organization::getInstanceId)
                 .filter(Objects::nonNull)
+                .distinct()
                 .collect(Collectors.toList());
 
         if (instanceIds.isEmpty()) {
@@ -199,10 +204,9 @@ public class DataServiceProviderGenerationSQL {
         }
 
         try {
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode arrayNode = mapper.readTree(json);
+            JsonNode arrayNode = OBJECT_MAPPER.readTree(json);
 
-            for (com.fasterxml.jackson.databind.JsonNode node : arrayNode) {
+            for (JsonNode node : arrayNode) {
                 String instanceId = getTextOrNull(node, "instance_id");
                 String legalName = getTextOrNull(node, "legalname");
                 String url = getTextOrNull(node, "url");
@@ -228,8 +232,8 @@ public class DataServiceProviderGenerationSQL {
         return related;
     }
 
-    private static String getTextOrNull(com.fasterxml.jackson.databind.JsonNode node, String fieldName) {
-        com.fasterxml.jackson.databind.JsonNode field = node.get(fieldName);
+    private static String getTextOrNull(JsonNode node, String fieldName) {
+        JsonNode field = node.get(fieldName);
         if (field == null || field.isNull()) {
             return null;
         }

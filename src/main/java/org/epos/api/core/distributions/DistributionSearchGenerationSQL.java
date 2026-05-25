@@ -555,6 +555,11 @@ public class DistributionSearchGenerationSQL {
 
         ctx.sql.append("WITH ");
 
+        String organizationParams = "";
+        if (!organizations.isEmpty()) {
+            organizationParams = nextListParam(ctx, organizations);
+        }
+
         // CTE 1: Published Distributions - base set filtered by versioning status
         // Build the status filter based on user permissions:
         // - Global admin users: can see all requested statuses
@@ -570,6 +575,25 @@ public class DistributionSearchGenerationSQL {
 
         buildVersioningStatusFilter(ctx, accessContext, parameters, requestedStatuses, "v", "d.meta_id");
         ctx.sql.append("), ");
+
+        if (!organizations.isEmpty()) {
+            ctx.sql.append("selected_organizations AS ( ")
+                    .append("SELECT o.instance_id ")
+                    .append("FROM metadata_catalogue.organization o ")
+                    .append("WHERE o.instance_id IN ").append(organizationParams)
+                    .append(" OR o.legalname IN ").append(organizationParams)
+                    .append("), ")
+                    .append("recursive_organizations AS ( ")
+                    .append("SELECT so.instance_id FROM selected_organizations so ")
+                    .append("UNION ")
+                    .append("SELECT om.organization2_instance_id AS instance_id ")
+                    .append("FROM metadata_catalogue.organization_memberof om ")
+                    .append("JOIN recursive_organizations ro ON om.organization1_instance_id = ro.instance_id ")
+                    .append("), ")
+                    .append("expanded_organizations AS ( ")
+                    .append("SELECT DISTINCT ro.instance_id FROM recursive_organizations ro ")
+                    .append("), ");
+        }
 
         // CTE 2: DataProduct Info - with temporal, keyword, and category filters
         ctx.sql.append("dataproduct_info AS ( ")
@@ -682,13 +706,9 @@ public class DistributionSearchGenerationSQL {
             // Build UNION of DataProduct-filtered and WebService-filtered distributions
             ctx.sql.append("SELECT distribution_instance_id AS instance_id FROM dataproduct_info ");
 
-            String orgParams = "";
             if (hasOrgFilter) {
-                orgParams = nextListParam(ctx, organizations);
                 ctx.sql.append("JOIN metadata_catalogue.dataproduct_publisher dpp2 ON dataproduct_info.dataproduct_id = dpp2.dataproduct_instance_id ")
-                        .append("JOIN metadata_catalogue.organization o2 ON dpp2.organization_instance_id = o2.instance_id ")
-                        .append("WHERE (o2.instance_id IN ").append(orgParams)
-                        .append(" OR o2.legalname IN ").append(orgParams).append(") ");
+                        .append("WHERE dpp2.organization_instance_id IN (SELECT instance_id FROM expanded_organizations) ");
             }
 
             // BUG FIX: Always include webservice path in UNION when not using strict DataProduct filters
@@ -697,9 +717,7 @@ public class DistributionSearchGenerationSQL {
                 ctx.sql.append(" UNION ");
                 ctx.sql.append("SELECT distribution_instance_id AS instance_id FROM webservice_info ");
                 if (hasOrgFilter) {
-                    ctx.sql.append("JOIN metadata_catalogue.organization o3 ON webservice_info.provider_id = o3.instance_id ")
-                            .append("WHERE (o3.instance_id IN ").append(orgParams)
-                            .append(" OR o3.legalname IN ").append(orgParams).append(") ");
+                    ctx.sql.append("WHERE webservice_info.provider_id IN (SELECT instance_id FROM expanded_organizations) ");
                 }
             }
         }
