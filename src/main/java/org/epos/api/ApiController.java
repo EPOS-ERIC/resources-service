@@ -33,6 +33,7 @@ import org.epos.api.core.facilities.FacilityDetailsItemGenerationSQL;
 import org.epos.api.core.facilities.FacilitySearchGenerationJPA;
 import org.epos.api.core.facilities.FacilitySearchGenerationSQL;
 import org.epos.api.core.organizations.OrganisationsGeneration;
+import org.epos.api.core.organizations.OrganisationsGenerationSQL;
 import org.epos.api.facets.Facets;
 import org.epos.api.utility.Utils;
 import org.epos.eposdatamodel.User;
@@ -109,7 +110,11 @@ abstract class ApiController<T> {
 			response = Utils.gson.toJson(MonitoringGeneration.generate());
 			break;
 		case "ORGANISATIONS":
-			response = Utils.gson.toJson(OrganisationsGeneration.generate(requestParams));
+			if (EnvironmentVariables.USE_SQL_IMPLEMENTATION) {
+				response = Utils.gson.toJson(OrganisationsGenerationSQL.generate(requestParams));
+			} else {
+				response = Utils.gson.toJson(OrganisationsGeneration.generate(requestParams));
+			}
 			break;
 		default:
 			break;
