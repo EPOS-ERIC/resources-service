@@ -238,7 +238,7 @@ public class MonitoringGenerationSQL {
                     String property = getTextOrNull(node, "property");
                     String valuePattern = getTextOrNull(node, "valuepattern");
 
-                    if (variable != null && defaultValue != null) {
+                    if (variable != null && !variable.isEmpty() && defaultValue != null && !defaultValue.isEmpty() ) {
                         if (property != null && valuePattern != null &&
                                 (property.equals("schema:startDate") || property.equals("schema:endDate"))) {
                             parametersMap.put(variable, Utils.convertDateUsingPattern(defaultValue, null, valuePattern));
