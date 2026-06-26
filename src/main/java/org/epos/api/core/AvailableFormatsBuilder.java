@@ -401,7 +401,7 @@ public class AvailableFormatsBuilder {
             }
         }
         // WFS with JSON
-        else if (pv.equals("json") && (templateLower.contains("service=wfs") 
+        else if (pv.toLowerCase().equals("json") && (templateLower.contains("service=wfs") 
                 || containsServiceInMappings(allMappings, "WFS", currentMap)
                 || (serviceValues != null && serviceValues.contains("WFS")))) {
             formats.add(createGeoJsonFormat(instanceId, pv, "json"));
