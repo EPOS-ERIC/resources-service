@@ -326,7 +326,7 @@ public class AvailableFormatsBuilder {
                     continue;
                 }
 
-                for (String pv : map.paramValues) {
+                for (String pv : getEncodingFormatValues(map)) {
                     processEncodingFormatValue(instanceId, pv, templateLower, allMappings, map, serviceValues, formats);
                 }
             }
@@ -349,7 +349,10 @@ public class AvailableFormatsBuilder {
             JsonNode arrayNode = OBJECT_MAPPER.readTree(availableFormatsJson);
             for (JsonNode formatNode : arrayNode) {
                 String paramValue = getTextOrNull(formatNode, "format");
-                if (paramValue == null) {
+                if (paramValue == null || paramValue.isEmpty()) {
+                    paramValue = getTextOrNull(formatNode, "default_value");
+                }
+                if (paramValue == null || paramValue.isEmpty()) {
                     continue;
                 }
 
@@ -465,6 +468,16 @@ public class AvailableFormatsBuilder {
         String property;
         String defaultValue;
         List<String> paramValues;
+    }
+
+    private static List<String> getEncodingFormatValues(MappingInfo map) {
+        if (map.paramValues != null && !map.paramValues.isEmpty()) {
+            return map.paramValues;
+        }
+        if (map.defaultValue != null && !map.defaultValue.isEmpty()) {
+            return List.of(map.defaultValue);
+        }
+        return Collections.emptyList();
     }
 
     private static boolean containsServiceInMappings(List<MappingInfo> mappings, String service, MappingInfo currentMap) {

@@ -504,8 +504,8 @@ public class FacilitySearchGenerationSQL {
         sql.append("  SELECT distribution_instance_id, JSONB_AGG(DISTINCT JSONB_BUILD_OBJECT( ");
         sql.append("    'format', pv.format_value, 'template', template, 'variable', variable, 'default_value', defaultvalue ");
         sql.append("  )) AS available_formats_data ");
-        sql.append("  FROM encoding_formats ef, LATERAL UNNEST(ef.param_values) AS pv(format_value) ");
-        sql.append("  WHERE ef.param_values IS NOT NULL ");
+        sql.append("  FROM encoding_formats ef LEFT JOIN LATERAL UNNEST(COALESCE(ef.param_values, CASE WHEN ef.defaultvalue IS NULL THEN ARRAY[]::text[] ELSE ARRAY[ef.defaultvalue] END)) AS pv(format_value) ON TRUE ");
+        sql.append("  WHERE COALESCE(pv.format_value, ef.defaultvalue) IS NOT NULL AND COALESCE(pv.format_value, ef.defaultvalue) <> '' ");
         sql.append("  GROUP BY distribution_instance_id ");
         sql.append("), ");
 
