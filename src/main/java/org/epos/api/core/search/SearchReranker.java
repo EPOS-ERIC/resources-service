@@ -29,12 +29,13 @@ public class SearchReranker {
         }
 
         SearchSynonyms synonyms = new SearchSynonyms();
+        List<QueryTerm> originalTerms = SearchQueryProcessor.analyzeQuery(originalQuery);
         List<QueryTerm> queryTerms = SearchQueryProcessor.getAnalyzedTermsWithSynonyms(originalQuery, synonyms);
-        if (queryTerms.isEmpty()) {
+        if (originalTerms.isEmpty() || queryTerms.isEmpty()) {
             return items;
         }
 
-        return rerank(items, queryTerms);
+        return rerankWithProgressiveFiltering(items, queryTerms, originalTerms);
     }
 
     public static List<DiscoveryItem> rerank(List<DiscoveryItem> items, List<QueryTerm> queryTerms) {
@@ -42,24 +43,26 @@ public class SearchReranker {
             return items;
         }
 
-        return rerankWithProgressiveFiltering(items, queryTerms);
+        return rerankWithProgressiveFiltering(items, queryTerms, queryTerms);
     }
 
-    private static List<DiscoveryItem> rerankWithProgressiveFiltering(List<DiscoveryItem> items, List<QueryTerm> queryTerms) {
+    private static List<DiscoveryItem> rerankWithProgressiveFiltering(List<DiscoveryItem> items,
+                                                                      List<QueryTerm> scoringTerms,
+                                                                      List<QueryTerm> filteringTerms) {
         int totalDocs = items.size();
-        Map<String, Integer> termDocFrequency = calculateDocFrequencies(items, queryTerms);
+        Map<String, Integer> termDocFrequency = calculateDocFrequencies(items, scoringTerms);
 
         List<ScoredItem> scoredItems = new ArrayList<>();
         for (DiscoveryItem item : items) {
-            double score = calculateBM25Score(item, queryTerms, termDocFrequency, totalDocs);
-            int matchedTerms = countMatchedTerms(item, queryTerms);
+            double score = calculateBM25Score(item, scoringTerms, termDocFrequency, totalDocs);
+            int matchedTerms = countMatchedTerms(item, filteringTerms);
             scoredItems.add(new ScoredItem(item, score, matchedTerms));
         }
 
-        int requiredMatches = queryTerms.size();
+        int requiredMatches = filteringTerms.size();
         List<ScoredItem> filtered = new ArrayList<>();
 
-        while (requiredMatches >= 2 && filtered.isEmpty()) {
+        while (requiredMatches >= 1 && filtered.isEmpty()) {
             int minMatches = requiredMatches;
             filtered = scoredItems.stream()
                     .filter(si -> si.matchedTerms >= minMatches)
@@ -82,7 +85,7 @@ public class SearchReranker {
         });
 
         LOGGER.debug("Progressive filtering: {} query terms, required {} matches, returned {} items",
-                queryTerms.size(), requiredMatches, filtered.size());
+                filteringTerms.size(), requiredMatches, filtered.size());
 
         return filtered.stream()
                 .map(si -> si.item)
