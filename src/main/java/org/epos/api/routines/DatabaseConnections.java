@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 
 import dao.EposDataModelDAO;
 import org.epos.api.beans.Plugin;
+import org.epos.api.core.EnvironmentVariables;
 import org.epos.api.utility.Utils;
 import org.epos.eposdatamodel.User;
 import org.epos.router_framework.RpcRouter;
@@ -34,7 +35,7 @@ public class DatabaseConnections {
 	private static final Logger LOGGER = LoggerFactory.getLogger(DatabaseConnections.class);
 
 	// distributionId -> list of relations with plugins
-	private Map<String, List<Plugin.Relations>> plugins;
+	private Map<String, List<Plugin.Relations>> plugins = new HashMap<>();
 
     public RpcRouter getRouter() {
         return router;
@@ -52,6 +53,11 @@ public class DatabaseConnections {
 	private static int currentErrors = 0;
 
 	private DatabaseConnections() {
+		if (EnvironmentVariables.DISABLE_CONVERTER) {
+			LOGGER.info("[CONNECTION] Converter disabled");
+			return;
+		}
+
 		try {
 			router = RpcRouterBuilder.instance(Actor.getInstance(BuiltInActorType.CONVERTER))
 					.addServiceSupport(ServiceType.METADATA, Actor.getInstance(BuiltInActorType.CONVERTER))
@@ -100,6 +106,9 @@ public class DatabaseConnections {
 	}
 
     public void syncDatabaseConnections() {
+		if (EnvironmentVariables.DISABLE_CONVERTER) {
+			return;
+		}
 
         // one thread for each query
         ExecutorService executor = Executors.newFixedThreadPool(maxDbConnections);

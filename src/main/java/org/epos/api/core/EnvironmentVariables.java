@@ -29,6 +29,9 @@ public class EnvironmentVariables {
     public static final boolean USE_SQL_IMPLEMENTATION = 
             !"false".equalsIgnoreCase(System.getenv("USE_SQL_IMPLEMENTATION"));
 
+    public static final boolean DISABLE_CONVERTER =
+            "true".equalsIgnoreCase(System.getenv("DISABLE_CONVERTER"));
+
     ///api/frontend/v1
 	
 	private EnvironmentVariables() {}
