@@ -348,6 +348,9 @@ public class DistributionFilterSearch {
                         matchedUids.add(ds.getMetaId());
                     }
                 }
+                if (ds.getSpatialExtent() == null) {
+                    matchedUids.add(ds.getMetaId());
+                }
             });
 
             return datasetList.stream()

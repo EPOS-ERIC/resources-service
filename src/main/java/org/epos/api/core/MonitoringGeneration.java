@@ -82,11 +82,8 @@ public class MonitoringGeneration {
 
 
 				if (distribution.getEndpoint() != null) {
-					String compiledUrl = null;
-					compiledUrl = URLGeneration.generateURLFromTemplateAndMap(distribution.getEndpoint(),
+					String compiledUrl = URLGeneration.generateURLFromTemplateAndMap(distribution.getEndpoint(),
 							parametersMap);
-
-					System.out.println(compiledUrl);
 					try {
 						compiledUrl = URLGeneration.ogcWFSChecker(compiledUrl);
 					} catch (Exception e) {
@@ -94,9 +91,10 @@ public class MonitoringGeneration {
 								+ e.getMessage() + " - Continuing execution");
 					}
 
-					// compiledUrl = java.net.URLDecoder.decode(compiledUrl,
-					// StandardCharsets.UTF_8);
 					mb.setOriginalURL(compiledUrl);
+				} else {
+					// In that case it's a download url
+					mb.setOriginalURL(distribution.getDownloadURL());
 				}
 
 				// DDSS
@@ -106,36 +104,30 @@ public class MonitoringGeneration {
 						distrs.add(dist.getInstanceId());
 					});
 					if (distrs.contains(dx.getInstanceId())) {
-						String ddss = null;
-						if (Objects.nonNull(d.getIdentifier()))
-							for (LinkedEntity item : d.getIdentifier()) {
-								Identifier i = (Identifier) LinkedEntityAPI.retrieveFromLinkedEntity(item);
-								if (i.getType().equals("DDSS-ID")) {
-									ddss = i.getIdentifier();
-								}
-							}
-						if (ddss == null)
-							continue;
+						Category cat = (Category) LinkedEntityAPI.retrieveFromLinkedEntity(d.getCategory().getFirst());
+						CategoryScheme catschem = (CategoryScheme) LinkedEntityAPI.retrieveFromLinkedEntity(cat.getInScheme());
 
-						if (ddss.toLowerCase().contains("wp08"))
+						String catName = catschem.getTitle();
+
+						if (catName.toLowerCase().contains("seismology"))
 							mb.setTCSGroup("Seismology");
-						else if (ddss.toLowerCase().contains("wp09"))
+						else if (catName.toLowerCase().contains("near fault observatories"))
 							mb.setTCSGroup("Near Fault Observations");
-						else if (ddss.toLowerCase().contains("wp10"))
+						else if (catName.toLowerCase().contains("gnss data and products"))
 							mb.setTCSGroup("Geodesy");
-						else if (ddss.toLowerCase().contains("wp11"))
+						else if (catName.toLowerCase().contains("volcano observations"))
 							mb.setTCSGroup("Volcano Observations");
-						else if (ddss.toLowerCase().contains("wp12"))
+						else if (catName.toLowerCase().contains("satellite data"))
 							mb.setTCSGroup("Satellite Observations");
-						else if (ddss.toLowerCase().contains("wp13"))
+						else if (catName.toLowerCase().contains("geomagnetic observations"))
 							mb.setTCSGroup("Geoelectromagnetism");
-						else if (ddss.toLowerCase().contains("wp14"))
+						else if (catName.toLowerCase().contains("anthropogenic hazards"))
 							mb.setTCSGroup("Anthropogenic Hazard Observations");
-						else if (ddss.toLowerCase().contains("wp15"))
+						else if (catName.toLowerCase().contains("geological information and modeling"))
 							mb.setTCSGroup("Geology");
-						else if (ddss.toLowerCase().contains("wp16"))
+						else if (catName.toLowerCase().contains("multi-scale laboratories"))
 							mb.setTCSGroup("Multi-Scale Laboratory");
-						else if (ddss.toLowerCase().contains("wp18"))
+						else if (catName.toLowerCase().contains("tsunami"))
 							mb.setTCSGroup("Tsunami");
 						else
 							mb.setTCSGroup("Undefined");
@@ -158,35 +150,22 @@ public class MonitoringGeneration {
 									}
 								}
 							}
+						} else {
+							for (LinkedEntity item : d.getContactPoint()) {
+								ContactPoint contact = (ContactPoint) LinkedEntityAPI.retrieveFromLinkedEntity(item);
+								try {
+									mb.createContacts(contact.getUid(), contact.getRole(),
+											new HashSet<>(contact.getEmail()).stream().toList());
+								} catch (Exception e) {
+									LOGGER.error(
+											"Found the following issue whilst creating contacts, issue raised "
+													+ e.getMessage() + " - Continuing execution");
+								}
+							}
+
 						}
 					}
 				}
-				// //VALIDATION RULES
-				// for(SoftwareApplication sw : softwareApplicationList) {
-				// for(LinkedEntity item : sw.getIdentifier()) {
-				// Identifier identifier = (Identifier)
-				// LinkedEntityAPI.retrieveFromLinkedEntity(item);
-				// if(identifier.getIdentifier().toLowerCase().contains("monitoring/zabbix")) {
-				//
-				// if(dx.getAccessURLByInstanceId()!=null &&
-				// sw.getRelation().stream().map(LinkedEntity::getUid).collect(Collectors.toList()).containsAll(dx.getAccessURLByInstanceId().stream()
-				// .map(EDMDistributionAccessURL::getOperationByInstanceOperationId).map(EDMOperation::getUid).collect(Collectors.toList()))){
-				// String validationtype = sw.getRequirements().replace("validation-type=", "");
-				// if(validationtype.equals("")) validationtype="none";
-				// String encodingFormatObject = null;
-				// String schemaversionObject = null;
-				// for (Parameter parameter : sw.getParameter()) {
-				// if (parameter.getAction().equals(ActionEnum.OBJECT)){
-				// encodingFormatObject = parameter.getEncodingFormat();
-				// schemaversionObject = parameter.getConformsTo();
-				// }
-				// }
-				// mb.createValidationRule(validationtype, encodingFormatObject,
-				// schemaversionObject);
-				// }
-				// }
-				// }
-				// }
 				if (mb.getValidationRules() == null || mb.getValidationRules().isEmpty()) {
 					mb.createValidationRule("none", null, null);
 				}
