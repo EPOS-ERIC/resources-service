@@ -288,7 +288,7 @@ public class DistributionFilterSearch {
 						if(Objects.nonNull(distribution1) && distribution1.getAccessService() != null){
 							for (LinkedEntity accessService : distribution1.getAccessService()) {
 								WebService ws = (WebService) AbstractAPI.retrieveAPI(EntityNames.WEBSERVICE.name()).retrieve(accessService.getInstanceId());
-								if(Objects.nonNull(ws)){
+								if(Objects.nonNull(ws) && Objects.nonNull(ws.getProvider())){
 									Organization organization = (Organization) AbstractAPI.retrieveAPI(EntityNames.ORGANIZATION.name()).retrieve(ws.getProvider().getInstanceId());
 									if(Objects.nonNull(organization)) organisationList.add(organization);
 								}
